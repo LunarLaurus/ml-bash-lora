@@ -1,5 +1,5 @@
 #!/bin/bash
-source "$SCRIPT_DIR/helpers.sh"
+source "$PROJECT_ROOT/helpers.sh"
 
 while true; do
     echo -e "\n${GREEN}===== ML/LoRA + RAG Main Menu =====${NC}"
