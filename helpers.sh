@@ -45,17 +45,6 @@ update_script_dir() {
     
     # Logging
     echo -e "[INFO] SCRIPT_DIR updated to: $SCRIPT_DIR (depth=$depth)"
-    echo -e "[DEBUG] BASH_SOURCE array:"
-    local i=0
-    for src in "${BASH_SOURCE[@]}"; do
-        echo "  [$i] = $src"
-        ((i++))
-    done
-    echo -e "[DEBUG] Requested depth: $depth"
-    local max_index=$((${#BASH_SOURCE[@]} - 1))
-    local use_idx=$(( depth <= max_index ? depth : max_index ))
-    echo -e "[DEBUG] Using BASH_SOURCE index: $use_idx -> ${BASH_SOURCE[$use_idx]}"
-    echo -e "[DEBUG] Resolved directory: $SCRIPT_DIR"
 }
 
 
