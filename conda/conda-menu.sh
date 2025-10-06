@@ -41,8 +41,8 @@ while true; do
         2) create_ml_env ;;
         3) switch_env ;;
         4) remove_ml_env ;;
-        4) show_python_version ;;
-        4) env_disk_usage ;;
+        5) show_python_version ;;
+        6) env_disk_usage ;;
         0) break ;;
         *) echo -e "${RED}Invalid option${NC}" ;;
     esac
