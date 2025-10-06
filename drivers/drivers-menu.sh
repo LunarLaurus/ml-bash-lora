@@ -27,7 +27,7 @@ while true; do
     read -rp "Choice: " choice
     case $choice in
         1) install_drivers ;;
-        1) show_nvidia_smi ;;
+        2) show_nvidia_smi ;;
         0) break ;;
         *) echo -e "${RED}Invalid option${NC}" ;;
     esac
