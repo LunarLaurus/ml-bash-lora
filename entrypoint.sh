@@ -2,8 +2,11 @@
 set -euo pipefail
 IFS=$'\n\t'
 
-# Source helpers first
+# ------------------------------
+# Script directory helpers
+# ------------------------------
 PROJECT_ROOT="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "=============================="
 echo " ML/LoRA + RAG Setup Script"

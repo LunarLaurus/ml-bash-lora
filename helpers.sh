@@ -17,10 +17,6 @@ NC='\033[0m'
 # ------------------------------
 ML_ENV_FILE="$HOME/.ml_current_env"
 
-# ------------------------------
-# Script directory helpers
-# ------------------------------
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # ------------------------------
 # Get the directory of a sourced script relative to call depth
@@ -32,25 +28,36 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 get_script_dir() {
     local depth="${1:-0}"  # default 0 if not provided
     local src_index=$((depth + 0))
-    
+
+    # Show all BASH_SOURCE entries for debugging
+    echo -e "\n[DEBUG] BASH_SOURCE array:"
+    for i in "${!BASH_SOURCE[@]}"; do
+        echo "  [$i] = ${BASH_SOURCE[$i]}"
+    done
+
     # Ensure we don't go out of bounds
     if [ "$src_index" -ge "${#BASH_SOURCE[@]}" ]; then
         src_index=$((${#BASH_SOURCE[@]} - 1))
+        echo "[DEBUG] Requested depth $depth exceeds BASH_SOURCE length, using last index $src_index"
     fi
 
     local src="${BASH_SOURCE[$src_index]}"
     local dir
     dir="$(cd "$(dirname "$src")" && pwd)"
+
+    echo "[DEBUG] Requested depth: $depth"
+    echo "[DEBUG] Using BASH_SOURCE index: $src_index -> $src"
+    echo "[DEBUG] Resolved directory: $dir"
+
     echo "$dir"
 }
 
-# ------------------------------
-# Update SCRIPT_DIR
-# ------------------------------
 update_script_dir() {
     local depth="${1:-0}"
     SCRIPT_DIR="$(get_script_dir "$depth")"
+    echo "[INFO] SCRIPT_DIR updated to: $SCRIPT_DIR (depth=$depth)"
 }
+
 
 check_env() {
     if [ ! -f "$ML_ENV_FILE" ]; then
