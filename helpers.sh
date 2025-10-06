@@ -20,12 +20,7 @@ ML_ENV_FILE="$HOME/.ml_current_env"
 # ------------------------------
 # Script directory helpers
 # ------------------------------
-# Top-level project root
-# Only define once
-if [ -z "${PROJECT_ROOT+x}" ]; then
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    PROJECT_ROOT="$(cd "$SCRIPT_DIR/../" && pwd)"
-fi
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Return directory of a script
 get_script_dir() {
