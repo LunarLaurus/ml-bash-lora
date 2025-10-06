@@ -24,9 +24,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Return directory of a script
 get_script_dir() {
+    # $1 = optional: index in BASH_SOURCE array
+    local src_index=${1:-0}
     local dir
-    dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    dir="$(cd "$(dirname "${BASH_SOURCE[$src_index]}")" && pwd)"
     echo "$dir"
+}
+
+update_script_dir() {
+    SCRIPT_DIR="$(get_script_dir 0)"
 }
 
 check_env() {

@@ -1,5 +1,6 @@
 #!/bin/bash
 source "$PROJECT_ROOT/helpers.sh"
+update_script_dir
 
 show_disk_usage() {
     echo -e "${GREEN}Disk Usage:${NC}"

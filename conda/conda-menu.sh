@@ -1,5 +1,7 @@
 #!/bin/bash
 source "$PROJECT_ROOT/helpers.sh"
+update_script_dir
+
 source "$SCRIPT_DIR/install_conda.sh"
 source "$SCRIPT_DIR/env_manager.sh"
 

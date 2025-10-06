@@ -1,6 +1,7 @@
 #!/bin/bash
-source "$SCRIPT_DIR/detect_cuda.sh"
 source "$PROJECT_ROOT/helpers.sh"
+update_script_dir
+source "$SCRIPT_DIR/detect_cuda.sh"
 
 # ------------------------------
 # Ensure NVIDIA CUDA repo exists

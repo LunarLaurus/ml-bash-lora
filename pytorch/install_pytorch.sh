@@ -1,5 +1,6 @@
 #!/bin/bash
 source "$PROJECT_ROOT/helpers.sh"
+update_script_dir
 
 # ------------------------------
 # Select and install PyTorch wheel (auto-installs & validates CUDA <-> torch match)
