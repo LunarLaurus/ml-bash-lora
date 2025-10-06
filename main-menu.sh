@@ -1,6 +1,7 @@
 #!/bin/bash
 source "$PROJECT_ROOT/helpers.sh"
 
+echo "SCRIPT_DIR: $SCRIPT_DIR"
 while true; do
     echo -e "\n${GREEN}===== ML/LoRA + RAG Main Menu =====${NC}"
     check_env || true

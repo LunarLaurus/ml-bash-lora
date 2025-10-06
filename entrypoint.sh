@@ -10,5 +10,6 @@ echo " ML/LoRA + RAG Setup Script"
 echo " Auto-detect GPU/CUDA/PyTorch"
 echo " Ubuntu 22.04 / RTX 4000+"
 echo "=============================="
+echo "PROJECT_ROOT: $PROJECT_ROOT"
 
 bash "$PROJECT_ROOT/main-menu.sh"
