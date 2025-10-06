@@ -15,11 +15,11 @@ while true; do
 
     read -rp "Choice: " choice
     case $choice in
-        1) bash ./drivers/drivers-menu.sh ;;
-        2) bash ./cuda/cuda-menu.sh ;;
-        3) bash ./conda/conda-menu.sh ;;
-        4) bash ./pytorch/pytorch-menu.sh ;;
-        5) bash ./diagnostics/diagnostics-menu.sh ;;
+        1) source ./drivers/drivers-menu.sh ;;
+        2) source ./cuda/cuda-menu.sh ;;
+        3) source ./conda/conda-menu.sh ;;
+        4) source ./pytorch/pytorch-menu.sh ;;
+        5) source ./diagnostics/diagnostics-menu.sh ;;
         0) echo "Exiting."; exit 0 ;;
         *) echo -e "${RED}Invalid option${NC}" ;;
     esac

@@ -12,4 +12,4 @@ echo " Ubuntu 22.04 / RTX 4000+"
 echo "=============================="
 echo "PROJECT_ROOT: $PROJECT_ROOT"
 
-bash "$PROJECT_ROOT/main-menu.sh"
+source "$PROJECT_ROOT/main-menu.sh"
