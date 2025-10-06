@@ -26,37 +26,38 @@ ML_ENV_FILE="$HOME/.ml_current_env"
 # etc.
 # ------------------------------
 get_script_dir() {
-    local depth="${1:-0}"  # default 0 if not provided
-    local src_index=$((depth + 0))
-
-    # Show all BASH_SOURCE entries for debugging
-    echo -e "\n[DEBUG] BASH_SOURCE array:"
-    for i in "${!BASH_SOURCE[@]}"; do
-        echo "  [$i] = ${BASH_SOURCE[$i]}"
-    done
-
-    # Ensure we don't go out of bounds
-    if [ "$src_index" -ge "${#BASH_SOURCE[@]}" ]; then
-        src_index=$((${#BASH_SOURCE[@]} - 1))
-        echo "[DEBUG] Requested depth $depth exceeds BASH_SOURCE length, using last index $src_index"
-    fi
-
-    local src="${BASH_SOURCE[$src_index]}"
+    local depth="${1:-0}"
+    local max_index=$((${#BASH_SOURCE[@]} - 1))
+    local idx=$(( depth <= max_index ? depth : max_index ))
+    local src="${BASH_SOURCE[$idx]}"
     local dir
     dir="$(cd "$(dirname "$src")" && pwd)"
-
-    echo "[DEBUG] Requested depth: $depth"
-    echo "[DEBUG] Using BASH_SOURCE index: $src_index -> $src"
-    echo "[DEBUG] Resolved directory: $dir"
-
     echo "$dir"
 }
 
+# ------------------------------
+# Update global SCRIPT_DIR
+# ------------------------------
 update_script_dir() {
     local depth="${1:-0}"
+
     SCRIPT_DIR="$(get_script_dir "$depth")"
-    echo "[INFO] SCRIPT_DIR updated to: $SCRIPT_DIR (depth=$depth)"
+    
+    # Logging
+    echo -e "[INFO] SCRIPT_DIR updated to: $SCRIPT_DIR (depth=$depth)"
+    echo -e "[DEBUG] BASH_SOURCE array:"
+    local i=0
+    for src in "${BASH_SOURCE[@]}"; do
+        echo "  [$i] = $src"
+        ((i++))
+    done
+    echo -e "[DEBUG] Requested depth: $depth"
+    local max_index=$((${#BASH_SOURCE[@]} - 1))
+    local use_idx=$(( depth <= max_index ? depth : max_index ))
+    echo -e "[DEBUG] Using BASH_SOURCE index: $use_idx -> ${BASH_SOURCE[$use_idx]}"
+    echo -e "[DEBUG] Resolved directory: $SCRIPT_DIR"
 }
+
 
 
 check_env() {
