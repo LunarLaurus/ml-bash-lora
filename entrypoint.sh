@@ -3,7 +3,7 @@ set -euo pipefail
 IFS=$'\n\t'
 
 # Source helpers first
-source "$(dirname "$0")/helpers/helpers.sh"
+source "$(dirname "$0")/helpers.sh"
 
 echo "=============================="
 echo " ML/LoRA + RAG Setup Script"
