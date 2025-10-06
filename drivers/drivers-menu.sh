@@ -1,6 +1,6 @@
 #!/bin/bash
 source "$PROJECT_ROOT/helpers.sh"
-update_script_dir
+update_script_dir 1
 
 install_drivers() {
     echo -e "${GREEN}Updating system and installing NVIDIA drivers...${NC}"

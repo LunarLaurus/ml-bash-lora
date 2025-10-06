@@ -22,17 +22,34 @@ ML_ENV_FILE="$HOME/.ml_current_env"
 # ------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Return directory of a script
+# ------------------------------
+# Get the directory of a sourced script relative to call depth
+# depth=0 → the current script
+# depth=1 → the script that sourced this one
+# depth=2 → the script that sourced the script that sourced this one
+# etc.
+# ------------------------------
 get_script_dir() {
-    # $1 = optional: index in BASH_SOURCE array
-    local src_index=${1:-0}
+    local depth="${1:-0}"  # default 0 if not provided
+    local src_index=$((depth + 0))
+    
+    # Ensure we don't go out of bounds
+    if [ "$src_index" -ge "${#BASH_SOURCE[@]}" ]; then
+        src_index=$((${#BASH_SOURCE[@]} - 1))
+    fi
+
+    local src="${BASH_SOURCE[$src_index]}"
     local dir
-    dir="$(cd "$(dirname "${BASH_SOURCE[$src_index]}")" && pwd)"
+    dir="$(cd "$(dirname "$src")" && pwd)"
     echo "$dir"
 }
 
+# ------------------------------
+# Update SCRIPT_DIR
+# ------------------------------
 update_script_dir() {
-    SCRIPT_DIR="$(get_script_dir 0)"
+    local depth="${1:-0}"
+    SCRIPT_DIR="$(get_script_dir "$depth")"
 }
 
 check_env() {
