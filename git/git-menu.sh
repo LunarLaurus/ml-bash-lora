@@ -1,4 +1,6 @@
 #!/bin/bash
+source "$PROJECT_ROOT/helpers.sh"
+source "$PROJECT_ROOT/conda/env_manager.sh"
 update_script_dir 2
 source "$SCRIPT_DIR/git_data.sh"
 
@@ -239,6 +241,122 @@ open_repo_shell() {
     cd "$SCRIPT_DIR" || true
 }
 
+# -------------------------------
+# Extract code dataset from a repo
+# -------------------------------
+extract_code_dataset() {
+    list_repos
+    read -rp "Enter repo index or folder name to extract (or 'q' to cancel): " sel
+    [ "$sel" = "q" ] && return 0
+
+    local url folder
+    if [[ "$sel" =~ ^[0-9]+$ ]]; then
+        if (( sel < 0 || sel >= ${#poke_repos_mainline[@]} )); then
+            echo -e "${BRED}Index out of range${NC}"
+            return 1
+        fi
+        url="${poke_repos_mainline[$sel]}"
+        folder="$(repo_folder_from_url "$url")"
+    else
+        folder="$sel"
+        # try to find matching URL for info
+        for u in "${poke_repos_mainline[@]}"; do
+            if [ "$(repo_folder_from_url "$u")" = "$sel" ]; then
+                url="$u"
+                break
+            fi
+        done
+    fi
+
+    if [ ! -d "$folder" ]; then
+        echo -e "${BRED}Folder '$folder' does not exist locally. Clone it first.${NC}"
+        return 1
+    fi
+
+    ensure_python_cmd || { echo -e "${RED}Python not found.${NC}"; return 1; }    
+
+    # Check Python dependencies
+    local missing_deps=()
+    for dep in tree_sitter tqdm; do
+        if ! "$PYTHON_CMD" -c "import $dep" &>/dev/null; then
+            missing_deps+=("$dep")
+        fi
+    done
+
+    if [ ${#missing_deps[@]} -gt 0 ]; then
+        echo -e "${BRED}Missing Python dependencies: ${missing_deps[*]}${NC}"
+        SUGGESTED="${missing_deps[*]}"
+        echo "Attempting to install automatically: ${PIP_CMD[@]} install --upgrade $SUGGESTED"
+        "${PIP_CMD[@]}" install --upgrade $SUGGESTED || {
+            echo -e "${BRED}Automatic installation failed. Please install manually:${NC} pip install $SUGGESTED"
+            return 1
+        }
+        echo -e "${BGREEN}Dependencies installed successfully.${NC}"
+    fi
+
+    # Set output file
+    local output_file="${folder}_dataset.jsonl"
+
+    echo -e "${BGREEN}Extracting code dataset from '$folder' into '$output_file'...${NC}"
+    "$PYTHON_CMD" "$SCRIPT_DIR/extract_code_dataset.py" "$folder" --out "$output_file"
+
+    if [ $? -eq 0 ]; then
+        echo -e "${BGREEN}Extraction complete! Dataset saved to '$output_file'${NC}"
+    else
+        echo -e "${BRED}Extraction failed${NC}"
+    fi
+}
+
+# -------------------------------
+# Fine-tune LoRA on a repo dataset
+# -------------------------------
+train_repo_lora() {
+    list_repos
+    read -rp "Enter repo index or folder name to train LoRA (or 'q' to cancel): " sel
+    [ "$sel" = "q" ] && return 0
+
+    local folder dataset output
+    if [[ "$sel" =~ ^[0-9]+$ ]]; then
+        if (( sel < 0 || sel >= ${#poke_repos_mainline[@]} )); then
+            echo -e "${BRED}Index out of range${NC}"
+            return 1
+        fi
+        folder="$(repo_folder_from_url "${poke_repos_mainline[$sel]}")"
+    else
+        folder="$sel"
+    fi
+
+    dataset="${folder}_dataset.jsonl"
+    output="./lora_${folder}"
+
+    if [ ! -f "$dataset" ]; then
+        echo -e "${BRED}Dataset file '$dataset' not found. Run extraction first.${NC}"
+        return 1
+    fi
+
+    # Check Python dependencies
+    local missing_deps=()
+    for dep in transformers datasets peft torch tqdm; do
+        if ! "$PYTHON_CMD" -c "import $dep" &>/dev/null; then
+            missing_deps+=("$dep")
+        fi
+    done
+    if [ ${#missing_deps[@]} -gt 0 ]; then
+        echo -e "${BRED}Missing Python dependencies: ${missing_deps[*]}${NC}"
+        SUGGESTED="${missing_deps[*]}"
+        echo "Attempting to install automatically: ${PIP_CMD[@]} install --upgrade $SUGGESTED"
+        "${PIP_CMD[@]}" install --upgrade $SUGGESTED || {
+            echo -e "${BRED}Automatic installation failed. Please install manually:${NC} pip install $SUGGESTED"
+            return 1
+        }
+        echo -e "${BGREEN}Dependencies installed successfully.${NC}"
+    fi
+
+    echo -e "${BGREEN}Starting LoRA fine-tuning for '$folder'...${NC}"
+    "$PYTHON_CMD" "$SCRIPT_DIR/lora_train_repo.py" "$dataset" --output_dir "$output"
+    echo -e "${BGREEN}LoRA training finished. Adapter saved to '$output'${NC}"
+}
+
 # Main menu
 while true; do
     echo -e "\n${BGREEN}=== Git Repos Menu (pret: Gen I-IV mainline) ===${NC}"
@@ -249,6 +367,8 @@ while true; do
     echo "5) Show git status for a repo"
     echo "6) Delete local repo folder"
     echo "7) Open subshell in repo folder"
+    echo "8) Extract code dataset from repo"
+    echo "9) Fine-tune LoRA on a repo dataset"
     echo -e "${BRED}0) Back to Main Menu${NC}"
 
     read -rp "Choice: " choice
@@ -260,6 +380,8 @@ while true; do
         5) repo_status ;;
         6) delete_repo ;;
         7) open_repo_shell ;;
+        8) extract_code_dataset ;;
+        9) train_repo_lora ;;
         0) break ;;
         *) echo -e "${RED}Invalid option${NC}" ;;
     esac

@@ -1,6 +1,4 @@
 #!/bin/bash
-source "$PROJECT_ROOT/helpers.sh"
-update_script_dir 2
 
 # Mainline handheld Pokémon (Gen I–IV) — pret .git URLs
 poke_repos_mainline=(
