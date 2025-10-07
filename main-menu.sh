@@ -21,7 +21,7 @@ while true; do
         3) source ./conda/conda-menu.sh ;;
         4) source ./pytorch/pytorch-menu.sh ;;
         5) source ./diagnostics/diagnostics-menu.sh ;;
-        5) source ./utils/utils-menu.sh ;;
+        6) source ./utils/utils-menu.sh ;;
         0) echo "Exiting."; exit 0 ;;
         *) echo -e "${RED}Invalid option${NC}" ;;
     esac
