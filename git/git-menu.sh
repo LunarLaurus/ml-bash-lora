@@ -298,51 +298,86 @@ extract_code_dataset() {
     # Prepare Tree-sitter languages (C and ASM)
     # -------------------------------
     
-    # -------------------------------
-    # Step 1: Download latest Linux x64 Tree-sitter CLI
-    # -------------------------------
-    if [ ! -f "$TS_BIN" ]; then
-        echo -e "\n[INFO] Downloading latest Tree-sitter CLI (Linux x64)..."
-        
-        # Get latest release URL
-        TS_URL=$(curl -s https://api.github.com/repos/tree-sitter/tree-sitter/releases/latest \
-            | grep "browser_download_url" \
-            | grep "tree-sitter-linux-x64" \
-        | cut -d '"' -f 4)
-        
-        if [ -z "$TS_URL" ]; then
-            echo "[ERROR] Could not fetch latest Tree-sitter CLI URL"
+    # Map uname -m to tree-sitter asset substring
+    arch="$(uname -m)"
+    case "$arch" in
+        x86_64|amd64) ASSET_SUB="tree-sitter-linux-x64" ;;
+        aarch64|arm64) ASSET_SUB="tree-sitter-linux-arm64" ;;
+        armv7l) ASSET_SUB="tree-sitter-linux-armv7" ;;
+        *)
+            echo "[ERROR] Unsupported architecture: $arch"
+            echo "Please install tree-sitter CLI manually (via cargo or download the right binary)."
             exit 1
-        fi
-        
-        curl -L -o "$TS_BIN" "$TS_URL"
-        chmod +x "$TS_BIN"
+        ;;
+    esac
+    
+    echo "[INFO] Detected arch: $arch -> looking for asset containing: $ASSET_SUB"
+    
+    # Get the download URL for the latest release matching arch
+    TS_URL=$(curl -s "https://api.github.com/repos/tree-sitter/tree-sitter/releases/latest" \
+        | grep "browser_download_url" \
+        | grep "$ASSET_SUB" \
+        | head -n1 \
+    | cut -d '"' -f 4 || true)
+    
+    if [ -z "$TS_URL" ]; then
+        echo "[ERROR] Could not find a tree-sitter release asset matching '$ASSET_SUB'."
+        echo "List available assets:"
+        curl -s "https://api.github.com/repos/tree-sitter/tree-sitter/releases/latest" | grep "browser_download_url" | sed -n '1,200p'
+        exit 1
     fi
     
-    export PATH="$BUILD_DIR:$PATH"
+    echo "[INFO] Downloading tree-sitter from: $TS_URL"
+    curl -L -o "$TS_BIN" "$TS_URL"
+    chmod +x "$TS_BIN"
     
-    # -------------------------------
-    # Step 2: Clone grammar repos if missing
-    # -------------------------------
+    # Verify binary
+    file_out="$(file "$TS_BIN")"
+    echo "[INFO] 'file' output: $file_out"
+    
+    # Quick sanity checks - ensure it's an ELF binary and not for wrong arch
+    if ! echo "$file_out" | grep -q "ELF"; then
+        echo "[ERROR] Downloaded file is not an ELF binary. Aborting."
+        exit 1
+    fi
+    
+    # Check for arch keywords in file output (best-effort)
+    if [[ "$arch" == "x86_64" ]] && ! echo "$file_out" | grep -qiE "x86-64|x86_64|Intel 80386|i386"; then
+        echo "[WARNING] Binary does not appear to be x86_64. file output: $file_out"
+    fi
+    if [[ "$arch" == "aarch64" || "$arch" == "arm64" ]] && ! echo "$file_out" | grep -qi "ARM"; then
+        echo "[WARNING] Binary does not appear to be ARM. file output: $file_out"
+    fi
+    
+    # Make sure we can execute it (some systems/containers still block)
+    if ! "$TS_BIN" --version &>/dev/null; then
+        echo "[ERROR] tree-sitter binary failed to run. file output: $file_out"
+        echo "Try running: $TS_BIN --version"
+        exit 1
+    fi
+    echo "[INFO] tree-sitter CLI is ready: $($TS_BIN --version 2>/dev/null || true)"
+    
+    # Ensure grammar repos (clone if missing)
     [ ! -d "$TS_C_REPO" ] && git clone https://github.com/tree-sitter/tree-sitter-c.git "$TS_C_REPO"
     [ ! -d "$TS_ASM_REPO" ] && git clone https://github.com/RubixDev/tree-sitter-asm.git "$TS_ASM_REPO"
     
-    # -------------------------------
-    # Step 3: Generate parsers
-    # -------------------------------
+    # Generate parser code for each grammar (creates src/parser.c inside grammar)
     "$TS_BIN" generate "$TS_C_REPO"
     "$TS_BIN" generate "$TS_ASM_REPO"
     
-    # -------------------------------
-    # Step 4: Build shared library (.so)
-    # -------------------------------
-    mkdir -p "$BUILD_DIR"
+    # Build shared library using the generated parser.c files
+    echo "[INFO] Building shared library at $TS_SO"
     gcc -shared -o "$TS_SO" \
     "$TS_C_REPO/src/parser.c" \
     "$TS_ASM_REPO/src/parser.c" \
-    -fPIC
+    -fPIC 2>/tmp/ts_gcc_build.log || {
+        echo "[ERROR] gcc failed to build my-languages.so. See /tmp/ts_gcc_build.log"
+        sed -n '1,200p' /tmp/ts_gcc_build.log
+        exit 1
+    }
     
-    echo -e "\n[INFO] Tree-sitter build complete. Shared library at $TS_SO"
+    mkdir -p "$BUILD_DIR"
+    echo "[INFO] Tree-sitter shared library built: $TS_SO"
     
     # Set output file
     local output_file="${folder}_dataset.jsonl"
