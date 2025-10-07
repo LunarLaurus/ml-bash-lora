@@ -1,6 +1,7 @@
 #!/bin/bash
 source "$PROJECT_ROOT/helpers.sh"
 source "$PROJECT_ROOT/cuda/detect_cuda.sh"
+source "$PROJECT_ROOT/pytorch/install_pytorch.sh"
 
 # ------------------------------
 # Helpers: ensure PYTHON_CMD/PIP_CMD point to current (activated) env

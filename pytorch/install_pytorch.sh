@@ -1,6 +1,7 @@
 #!/bin/bash
 source "$PROJECT_ROOT/helpers.sh"
 source "$PROJECT_ROOT/cuda/detect_cuda.sh"
+source "$PROJECT_ROOT/conda/env_manager.sh"
 update_script_dir 2
 
 # ------------------------------
@@ -11,8 +12,9 @@ select_pytorch_wheel() {
     detect_cuda --persist || true
 
     # Use the Python from the active conda env
-    PYTHON_CMD=$(which python)
-    PIP_CMD="$PYTHON_CMD -m pip"
+    # PYTHON_CMD=$(which python)
+    # PIP_CMD="$PYTHON_CMD -m pip"
+    ensure_python_cmd
 
     # Get CUDA version (major.minor)
     cuda_ver_num="${CUDA_VER:-}"
