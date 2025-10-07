@@ -242,7 +242,7 @@ open_repo_shell() {
 }
 
 # -------------------------------
-# Extract code dataset from a repo
+# Extract code dataset from a repo (updated for new tree-sitter API)
 # -------------------------------
 extract_code_dataset() {
     list_repos
@@ -273,7 +273,7 @@ extract_code_dataset() {
         return 1
     fi
 
-    ensure_python_cmd || { echo -e "${RED}Python not found.${NC}"; return 1; }    
+    ensure_python_cmd || { echo -e "${RED}Python not found.${NC}"; return 1; }
 
     # Check Python dependencies
     local missing_deps=()
@@ -294,11 +294,41 @@ extract_code_dataset() {
         echo -e "${BGREEN}Dependencies installed successfully.${NC}"
     fi
 
+    # Prepare Tree-sitter languages (C and ASM)
+    local ts_build_dir="$SCRIPT_DIR/build"
+    local ts_so="$ts_build_dir/my-languages.so"
+    local ts_c_repo="$SCRIPT_DIR/tree-sitter-c"
+    local ts_asm_repo="$SCRIPT_DIR/tree-sitter-asm"
+
+    mkdir -p "$ts_build_dir"
+
+    if [ ! -f "$ts_so" ]; then
+        echo -e "${BGREEN}Building Tree-sitter languages (C + ASM)...${NC}"
+        # clone if missing
+        [ ! -d "$ts_c_repo" ] && git clone https://github.com/tree-sitter/tree-sitter-c.git "$ts_c_repo"
+        [ ! -d "$ts_asm_repo" ] && git clone https://github.com/alexherbo2/tree-sitter-asm.git "$ts_asm_repo"
+
+        "$PYTHON_CMD" - <<EOF
+from tree_sitter import Language
+Language.build_library(
+    "$ts_so",
+    [
+        "$ts_c_repo",
+        "$ts_asm_repo"
+    ]
+)
+EOF
+        if [ $? -ne 0 ]; then
+            echo -e "${BRED}Failed to build Tree-sitter languages${NC}"
+            return 1
+        fi
+    fi
+
     # Set output file
     local output_file="${folder}_dataset.jsonl"
 
     echo -e "${BGREEN}Extracting code dataset from '$folder' into '$output_file'...${NC}"
-    "$PYTHON_CMD" "$SCRIPT_DIR/process-repo.py" "$folder" --out "$output_file"
+    "$PYTHON_CMD" "$SCRIPT_DIR/process-repo.py" "$folder" --out "$output_file" --ts_so "$ts_so"
 
     if [ $? -eq 0 ]; then
         echo -e "${BGREEN}Extraction complete! Dataset saved to '$output_file'${NC}"
