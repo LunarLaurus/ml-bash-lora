@@ -47,8 +47,6 @@ update_script_dir() {
     echo -e "[INFO] SCRIPT_DIR updated to: $SCRIPT_DIR (depth=$depth)"
 }
 
-
-
 check_env() {
     if [ ! -f "$ML_ENV_FILE" ]; then
         echo -e "${RED}No active ML environment set.${NC}"
@@ -57,6 +55,23 @@ check_env() {
     CURRENT_ENV=$(cat "$ML_ENV_FILE")
     echo -e "${GREEN}Current active ML environment: $CURRENT_ENV${NC}"
     return 0
+}
+
+get_active_env() {
+    if [ -f "$ML_ENV_FILE" ]; then
+        CURRENT_ENV="$(cat "$ML_ENV_FILE")"
+        if [ -z "$CURRENT_ENV" ]; then
+            return 1
+        fi
+        return 0
+    else
+        return 1
+    fi
+}
+
+error_no_env() {
+    echo -e "${RED}No active ML conda environment found in $ML_ENV_FILE.${NC}"
+    echo "Run the Conda / ML Environment menu and create/activate an environment first."
 }
 
 save_env() {
