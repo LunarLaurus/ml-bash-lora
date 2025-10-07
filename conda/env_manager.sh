@@ -204,7 +204,10 @@ activate_env() {
 setup_gpu_cuda() {
     detect_gpu 2>/dev/null || true
     detect_cuda 2>/dev/null || true
+    set_cuda_available
+}
 
+set_cuda_available() {
     CUDA_AVAILABLE=0
     if [ -n "${CUDA_VER:-}" ]; then
         CUDA_AVAILABLE=1
@@ -248,6 +251,7 @@ install_lora_stack() {
     echo -e "${BLUE}Installing LoRA stack into current env...${NC}"
     ensure_python_cmd || { echo -e "${RED}Python not found. Activate env first.${NC}"; return 1; }
     detect_cuda >/dev/null 2>&1 || echo -e "${YELLOW}Warning: CUDA not detected; CPU wheel will be used.${NC}"
+    set_cuda_available
 
     local pkgs=(transformers peft datasets accelerate)
     for pkg in "${pkgs[@]}"; do
@@ -279,6 +283,7 @@ install_rag_stack() {
     echo -e "${BLUE}Installing RAG stack into current env...${NC}"
     ensure_python_cmd || { echo -e "${RED}Python not found. Activate env first.${NC}"; return 1; }
     detect_cuda >/dev/null 2>&1 || echo -e "${YELLOW}Warning: CUDA not detected; CPU wheel will be used.${NC}"
+    set_cuda_available
 
     read -rp "Install RAG stack (faiss, sentence-transformers, langchain)? [y/N]: " rag
     if [[ ! "$rag" =~ ^[Yy]$ ]]; then
