@@ -5,18 +5,6 @@ update_script_dir 2
 source "$SCRIPT_DIR/install_conda.sh"
 source "$SCRIPT_DIR/env_manager.sh"
 
-
-# ------------------------------
-# Show Python Version in Active Env
-# ------------------------------
-show_python_version() {
-    if ! command -v python &>/dev/null; then
-        echo -e "${RED}Python not found in active environment.${NC}"
-        return 1
-    fi
-    echo -e "${GREEN}Python version:${NC} $(python --version)"
-}
-
 # ------------------------------
 # Show Disk Usage of Conda Environments
 # ------------------------------

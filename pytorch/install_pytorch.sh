@@ -1,5 +1,6 @@
 #!/bin/bash
 source "$PROJECT_ROOT/helpers.sh"
+source "$PROJECT_ROOT/cuda/detect_cuda.sh"
 update_script_dir 2
 
 # ------------------------------

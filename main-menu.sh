@@ -11,6 +11,7 @@ while true; do
     echo -e "3) Conda / ML Environments"
     echo -e "4) PyTorch Installation"
     echo -e "5) Diagnostics"
+    echo -e "6) Utilities"
     echo -e "0) Exit"
 
     read -rp "Choice: " choice
@@ -20,6 +21,7 @@ while true; do
         3) source ./conda/conda-menu.sh ;;
         4) source ./pytorch/pytorch-menu.sh ;;
         5) source ./diagnostics/diagnostics-menu.sh ;;
+        5) source ./utils/utils-menu.sh ;;
         0) echo "Exiting."; exit 0 ;;
         *) echo -e "${RED}Invalid option${NC}" ;;
     esac

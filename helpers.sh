@@ -68,15 +68,6 @@ update_apt_cache() {
     sudo apt-get update -qq
 }
 
-show_python_version() {
-    if ! command -v python &>/dev/null; then
-        echo -e "${RED}Python not found.${NC}"
-    else 
-        echo -e "${GREEN}Python version:${NC} $(python --version)"
-    fi
-}
-
-
 detect_gpu() {
     if ! command -v nvidia-smi &>/dev/null; then
         echo -e "${RED}NVIDIA driver not detected. Install first.${NC}"

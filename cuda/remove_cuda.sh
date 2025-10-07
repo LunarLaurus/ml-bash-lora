@@ -1,5 +1,6 @@
 #!/bin/bash
 source "$PROJECT_ROOT/helpers.sh"
+source "$PROJECT_ROOT/cuda/detect_cuda.sh"
 
 
 remove_cuda_version() {
