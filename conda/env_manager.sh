@@ -277,15 +277,23 @@ install_lora_stack() {
 
     # bitsandbytes via pip (GPU support depends on wheel / system CUDA)
     if ! "$PYTHON_CMD" -c "import bitsandbytes" &>/dev/null; then
-        if [ "${CUDA_AVAILABLE:-0}" -eq 1 ]; then
-            echo -e "${GREEN}Attempting to install bitsandbytes (GPU-capable wheel if available)...${NC}"
+        # Get numeric CUDA index (default 0 if none/mapping missing)
+        cuda_version_number=$(get_cuda_version_index)
+    
+        if [ "${CUDA_AVAILABLE:-0}" -eq 1 ] && [ "$cuda_version_number" -ne 0 ]; then
+            echo -e "${GREEN}Attempting to install bitsandbytes (GPU-capable wheel if available)...${NC}"            
+            "${PIP_CMD[@]}" install --upgrade "bitsandbytes-cuda$cuda_version_number" || \
+                echo -e "${RED}bitsandbytes install failed.${NC}"
         else
             echo -e "${YELLOW}Installing bitsandbytes without detected CUDA; GPU features may not work.${NC}"
+            "${PIP_CMD[@]}" install --upgrade bitsandbytes || \
+                echo -e "${RED}bitsandbytes install failed.${NC}"
         fi
-        "${PIP_CMD[@]}" install --upgrade bitsandbytes || echo -e "${RED}bitsandbytes install failed.${NC}"
     else
         echo -e "${GREEN}bitsandbytes already installed in current env.${NC}"
     fi
+
+
 }
 
 # ------------------------------
@@ -305,7 +313,7 @@ install_rag_stack() {
 
     # FAISS: prefer faiss-gpu via conda if conda exists and user has CUDA; otherwise use pip cpu option
     if [ "${CUDA_AVAILABLE:-0}" -eq 1 ] && command -v conda &>/dev/null; then
-        echo -e "${GREEN}Conda available and CUDA detected. Installing faiss-gpu via conda is preferred.${NC}"
+        echo -e "${GREEN}Conda available and CUDA detected.${NC}"
         echo -e "${GREEN}Attempting: conda install -y -n <active env> -c pytorch faiss-gpu${NC}"
         # If conda is present but we must not call it directly (user said avoid), we still try to call only if available.
         if ! conda install -y -n "${ENV_NAME:-$(cat $ML_ENV_FILE 2>/dev/null || echo '')}" -c pytorch faiss-gpu; then
@@ -437,6 +445,45 @@ show_python_version() {
     "$PYTHON_CMD" --version 2>&1
 }
 
+# Returns the PyTorch CUDA index string (e.g., cu118)
+# Returns cu0 if no CUDA detected or no mapping exists
+get_cu_index() {
+    local idx
+    idx=$(get_cuda_version_index)   # call the function that returns numeric index
+    printf 'cu%s' "$idx"
+}
+
+# Returns the PyTorch CUDA index string (e.g., 118) based on CUDA_VER
+# Returns 0 string if no CUDA detected or no mapping exists
+get_cuda_version_index() {
+    local cuda_ver="${CUDA_VER:-}"
+    local cuidx="0"  # default to 0 if nothing found
+
+    # Extract major.minor
+    if [ -n "$cuda_ver" ]; then
+        cuda_ver=$(printf '%s' "$cuda_ver" | grep -oE '^[0-9]+\.[0-9]+')
+    fi
+
+    # Mapping from CUDA version to cu index
+    declare -A CUDA_TO_CUIDX=(
+        ["11.8"]="118"
+        ["12.1"]="121"
+        ["12.2"]="122"
+        ["12.3"]="123"
+        ["12.4"]="124"
+        ["12.6"]="126"
+        ["12.8"]="128"
+        ["12.9"]="129"
+    )
+
+    # Look up index; if missing, keep default 0
+    cuidx="${CUDA_TO_CUIDX[$cuda_ver]:-$cuidx}"
+
+    # Return value
+    printf '%s' "$cuidx"
+}
+
+
 # ------------------------------
 # Select and install PyTorch wheel (auto-installs & validates CUDA <-> torch match)
 # ------------------------------
@@ -450,39 +497,8 @@ select_pytorch_wheel() {
     # PIP_CMD="$PYTHON_CMD -m pip"
     ensure_python_cmd
 
-    # Get CUDA version (major.minor)
-    cuda_ver_num="${CUDA_VER:-}"
-    if [ -n "$cuda_ver_num" ]; then
-        cuda_ver_num=$(printf '%s' "$cuda_ver_num" | grep -oE '^[0-9]+\.[0-9]+')
-    fi
-
-    # If no CUDA, default to CPU wheel
-    if [ -z "$cuda_ver_num" ]; then
-        echo -e "${YELLOW}No CUDA detected. Installing CPU-only PyTorch wheel.${NC}"
-        SUGGESTED="torch torchvision torchaudio"
-        echo -e "${GREEN}Installing: $SUGGESTED${NC}"
-        ${PIP_CMD[@]} install --upgrade $SUGGESTED || return 1
-        echo -e "${GREEN}CPU PyTorch installed.${NC}"
-        return 0
-    fi
-
-    # CUDA version -> PyTorch cu index
-    declare -A CUDA_TO_CUIDX=(
-        ["11.8"]="cu118"
-        ["12.1"]="cu121"
-        ["12.2"]="cu122"
-        ["12.3"]="cu123"
-        ["12.4"]="cu124"
-        ["12.6"]="cu126"
-        ["12.8"]="cu128"
-        ["12.9"]="cu129"
-    )
-    declare -A CUIDX_TO_TORCH_VER
-    for k in "${!CUDA_TO_CUIDX[@]}"; do
-        CUIDX_TO_TORCH_VER[${CUDA_TO_CUIDX[$k]}]=$k
-    done
-
-    cuidx="${CUDA_TO_CUIDX[$cuda_ver_num]}"
+    # Get PyTorch CUDA index
+    cuidx=$(get_cu_index)
     if [ -z "$cuidx" ]; then
         echo -e "${YELLOW}No mapping for detected CUDA $cuda_ver_num. Defaulting to CPU wheel.${NC}"
         SUGGESTED="torch torchvision torchaudio"
