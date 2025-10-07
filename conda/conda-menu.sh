@@ -16,6 +16,8 @@ env_disk_usage() {
     du -sh $HOME/miniforge/envs/* 2>/dev/null || echo -e "${YELLOW}No conda envs found or du failed.${NC}"
 }
 
+ensure_python_cmd || { echo -e "${RED}Python not found for active environment. Activate env first.${NC}"; return 1; }
+
 while true; do
     echo -e "\n${BCYAN}=== Conda / ML Environment Menu ===${NC}"
     echo "0) Install Miniforge (Conda)"

@@ -2,6 +2,10 @@
 source "$PROJECT_ROOT/helpers.sh"
 source "$PROJECT_ROOT/cuda/detect_cuda.sh"
 
+
+PYTHON_CMD=""
+PIP_CMD=()
+
 # ------------------------------
 # Helpers: ensure PYTHON_CMD/PIP_CMD point to current (activated) env
 # ------------------------------
@@ -249,7 +253,7 @@ install_lora_stack() {
     for pkg in "${pkgs[@]}"; do
         if ! "$PYTHON_CMD" -c "import ${pkg}" &>/dev/null; then
             echo -e "${GREEN}Installing ${pkg} into current env...${NC}"
-            "$PIP_CMD" install --upgrade "${pkg}" || echo -e "${YELLOW}Failed to install ${pkg} via pip.${NC}"
+            "${PIP_CMD[@]}" install --upgrade "${pkg}" || echo -e "${YELLOW}Failed to install ${pkg} via pip.${NC}"
         else
             echo -e "${GREEN}${pkg} already installed in current env.${NC}"
         fi
@@ -262,7 +266,7 @@ install_lora_stack() {
         else
             echo -e "${YELLOW}Installing bitsandbytes without detected CUDA; GPU features may not work.${NC}"
         fi
-        "$PIP_CMD" install --upgrade bitsandbytes || echo -e "${RED}bitsandbytes install failed.${NC}"
+        "${PIP_CMD[@]}" install --upgrade bitsandbytes || echo -e "${RED}bitsandbytes install failed.${NC}"
     else
         echo -e "${GREEN}bitsandbytes already installed in current env.${NC}"
     fi
@@ -288,18 +292,18 @@ install_rag_stack() {
         # If conda is present but we must not call it directly (user said avoid), we still try to call only if available.
         if ! conda install -y -n "${ENV_NAME:-$(cat $ML_ENV_FILE 2>/dev/null || echo '')}" -c pytorch faiss-gpu; then
             echo -e "${YELLOW}conda faiss-gpu failed or not possible. Falling back to pip faiss-cpu.${NC}"
-            "$PIP_CMD" install faiss-cpu || echo -e "${RED}faiss-cpu pip install failed.${NC}"
+            "${PIP_CMD[@]}" install faiss-cpu || echo -e "${RED}faiss-cpu pip install failed.${NC}"
         fi
     else
         echo -e "${GREEN}Installing faiss-cpu into current env (no conda/CUDA combo detected)...${NC}"
-        "$PIP_CMD" install faiss-cpu || echo -e "${YELLOW}faiss-cpu pip install failed.${NC}"
+        "${PIP_CMD[@]}" install faiss-cpu || echo -e "${YELLOW}faiss-cpu pip install failed.${NC}"
     fi
 
     # sentence-transformers and langchain via pip into current env
     for pkg in sentence-transformers langchain; do
         if ! "$PYTHON_CMD" -c "import ${pkg}" &>/dev/null; then
             echo -e "${GREEN}Installing ${pkg} into current env...${NC}"
-            "$PIP_CMD" install "${pkg}" || echo -e "${YELLOW}Failed to pip install ${pkg}.${NC}"
+            "${PIP_CMD[@]}" install "${pkg}" || echo -e "${YELLOW}Failed to pip install ${pkg}.${NC}"
         else
             echo -e "${GREEN}${pkg} already installed in current env.${NC}"
         fi
@@ -435,7 +439,7 @@ select_pytorch_wheel() {
         echo -e "${YELLOW}No CUDA detected. Installing CPU-only PyTorch wheel.${NC}"
         SUGGESTED="torch torchvision torchaudio"
         echo -e "${GREEN}Installing: $SUGGESTED${NC}"
-        $PIP_CMD install --upgrade $SUGGESTED || return 1
+        ${PIP_CMD[@]} install --upgrade $SUGGESTED || return 1
         echo -e "${GREEN}CPU PyTorch installed.${NC}"
         return 0
     fi
@@ -460,13 +464,13 @@ select_pytorch_wheel() {
     if [ -z "$cuidx" ]; then
         echo -e "${YELLOW}No mapping for detected CUDA $cuda_ver_num. Defaulting to CPU wheel.${NC}"
         SUGGESTED="torch torchvision torchaudio"
-        $PIP_CMD install --upgrade $SUGGESTED || return 1
+        ${PIP_CMD[@]} install --upgrade $SUGGESTED || return 1
         return 0
     fi
 
     SUGGESTED="torch torchvision torchaudio --index-url https://download.pytorch.org/whl/${cuidx}"
     echo -e "${GREEN}Installing PyTorch for CUDA $cuda_ver_num using wheel index $cuidx...${NC}"
-    $PIP_CMD install --upgrade $SUGGESTED || return 1
+    ${PIP_CMD[@]} install --upgrade $SUGGESTED || return 1
 
     # Validate installed torch
     TORCH_REPORTED="$($PYTHON_CMD -c 'import torch; v=getattr(torch.version,"cuda",None); print(v or "None")')"
