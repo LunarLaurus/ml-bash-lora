@@ -261,6 +261,7 @@ install_pytorch_if_missing() {
 install_lora_stack() {
     echo -e "${BLUE}Installing LoRA stack into current env...${NC}"
     ensure_python_cmd || { echo -e "${RED}Python not found. Activate env first.${NC}"; return 1; }
+    ensure_conda || { echo -e "${RED}Conda not found. Activate env first.${NC}"; return 1; }    
     detect_cuda >/dev/null 2>&1 || echo -e "${YELLOW}Warning: CUDA not detected; CPU wheel will be used.${NC}"
     set_cuda_available
 
@@ -293,6 +294,7 @@ install_lora_stack() {
 install_rag_stack() {
     echo -e "${BLUE}Installing RAG stack into current env...${NC}"
     ensure_python_cmd || { echo -e "${RED}Python not found. Activate env first.${NC}"; return 1; }
+    ensure_conda || { echo -e "${RED}Conda not found. Activate env first.${NC}"; return 1; }    
     detect_cuda >/dev/null 2>&1 || echo -e "${YELLOW}Warning: CUDA not detected; CPU wheel will be used.${NC}"
     set_cuda_available
 
@@ -339,8 +341,10 @@ validate_env() {
 
     detect_gpu || true
     detect_cuda || true
+    set_cuda_available
 
     ensure_python_cmd || { echo -e "${RED}Python not found in current shell. Activate env first.${NC}"; return 1; }
+    ensure_conda || { echo -e "${RED}Conda not found. Activate env first.${NC}"; return 1; }    
 
     "$PYTHON_CMD" - <<'PY'
 import sys
