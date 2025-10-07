@@ -1,7 +1,7 @@
 #!/bin/bash
 source "$PROJECT_ROOT/helpers.sh"
 update_script_dir 2
-source "$SCRIPT_DIR/env_manager.sh"
+source "$PROJECT_ROOT/conda/env_manager.sh"
 
 # ------------------------------
 # Apt install helpers (single or grouped)
