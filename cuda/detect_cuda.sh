@@ -19,6 +19,12 @@ _build_version_map() {
 }
 
 detect_cuda() {
+    # If we've already got a persisted/selected CUDA and nvcc exists there, don't prompt again.
+    if check_existing_cuda; then
+        return 0
+    fi
+
+    # No persistent CUDA detected — run interactive selection (as before)
     detect_cuda_select || return 1
 
     # show nvcc info if available
@@ -28,6 +34,23 @@ detect_cuda() {
     else
         echo -e "${RED}nvcc not found in PATH after selection.${NC}"
     fi
+}
+
+# Check if CUDA already persisted and valid
+check_existing_cuda() {
+    if [ -L /usr/local/cuda ]; then
+        local cur_target
+        cur_target="$(readlink -f /usr/local/cuda 2>/dev/null || true)"
+        if [ -n "$cur_target" ] && [ -x "$cur_target/bin/nvcc" ]; then
+            echo -e "${GREEN}Using existing persisted CUDA at $cur_target${NC}"
+            export CUDA_PATH="$cur_target"
+            export CUDA_VER="$("$cur_target/bin/nvcc" --version | grep -oP 'release \K[0-9]+\.[0-9]+')"
+            export PATH="$CUDA_PATH/bin:$PATH"
+            export LD_LIBRARY_PATH="$CUDA_PATH/lib64:${LD_LIBRARY_PATH:-}"
+            return 0
+        fi
+    fi
+    return 1
 }
 
 # Return list of candidate CUDA directories (global array: CUDA_CANDIDATES)
@@ -209,6 +232,12 @@ detect_cuda_select() {
     detect_cuda_list
     _build_version_map
 
+    # If CUDA already persisted and valid, skip selection
+    if check_existing_cuda; then
+        echo -e "${GREEN}Existing CUDA installation detected; skipping selection.${NC}"
+        return 0
+    fi
+
     if [ "${#CUDA_MAP[@]}" -eq 0 ]; then
         echo -e "${RED}No CUDA installations found on disk.${NC}"
         CUDA_VER=""
@@ -290,6 +319,13 @@ auto_detect_nvcc() {
     if command -v nvcc &>/dev/null; then
         nvcc_dir="$(dirname "$(dirname "$(readlink -f "$(command -v nvcc)")")")"
         echo "nvcc detected at $nvcc_dir"
+
+        # If CUDA already set and matches detected nvcc, skip prompting
+        if [ -n "${CUDA_PATH:-}" ] && [ "$(readlink -f "$CUDA_PATH")" = "$nvcc_dir" ]; then
+            echo -e "${GREEN}Detected nvcc matches current CUDA_PATH (${CUDA_PATH}). No change.${NC}"
+            return 0
+        fi
+
         read -rp "Use this CUDA and persist env? [y/N]: " ans
         if [[ "$ans" =~ ^[Yy]$ ]]; then
             CUDA_PATH="$nvcc_dir"
