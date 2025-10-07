@@ -61,7 +61,8 @@ install_python_packages_conda() {
     fi
     echo -e "${BCYAN}Installing Python packages into conda env '$CURRENT_ENV': $*${NC}"
     # Use conda run pip to avoid activating subshell
-    conda run -n "$CURRENT_ENV" python -m pip install --upgrade "$@" || {
+    ensure_python_cmd || { echo -e "${RED}Python not found.${NC}"; return 1; }
+    ${PIP_CMD[@]} install --upgrade "$@" || {
         echo -e "${YELLOW}pip install reported errors. Try running inside the env manually for more details.${NC}"
         return 1
     }
@@ -123,7 +124,9 @@ list_lora_lib_versions() {
         return 1
     fi
     echo -e "${BCYAN}LoRA-related package versions in '$CURRENT_ENV':${NC}"
-    conda run -n "$CURRENT_ENV" python - <<'PY'
+    ensure_python_cmd || { echo -e "${RED}Python not found.${NC}"; return 1; }
+
+    "$PYTHON_CMD" - <<PY
 import importlib
 pkgs = ["transformers","peft","bitsandbytes","accelerate","datasets","safetensors"]
 for p in pkgs:
@@ -142,7 +145,9 @@ list_rag_lib_versions() {
         return 1
     fi
     echo -e "${BCYAN}RAG-related package versions in '$CURRENT_ENV':${NC}"
-    conda run -n "$CURRENT_ENV" python - <<'PY'
+    ensure_python_cmd || { echo -e "${RED}Python not found.${NC}"; return 1; }
+
+    "$PYTHON_CMD" - <<PY
 import importlib
 pkgs = ["faiss","faiss_cpu","sentence_transformers","langchain","sentencepiece"]
 # normalize import names
