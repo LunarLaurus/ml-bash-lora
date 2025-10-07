@@ -306,7 +306,7 @@ extract_code_dataset() {
         echo -e "${BGREEN}Building Tree-sitter languages (C + ASM)...${NC}"
         # clone if missing
         [ ! -d "$ts_c_repo" ] && git clone https://github.com/tree-sitter/tree-sitter-c.git "$ts_c_repo"
-        [ ! -d "$ts_asm_repo" ] && git clone https://github.com/alexherbo2/tree-sitter-asm.git "$ts_asm_repo"
+        [ ! -d "$ts_asm_repo" ] && git clone https://github.com/RubixDev/tree-sitter-asm.git "$ts_asm_repo"
 
         "$PYTHON_CMD" - <<EOF
 from tree_sitter import Language
