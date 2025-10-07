@@ -74,14 +74,24 @@ PYCODE
 # (but most functions will not call conda; they use current activated env's python/pip)
 # ------------------------------
 ensure_conda() {
-    if [ -f "$HOME/miniforge/etc/profile.d/conda.sh" ]; then
-        # shellcheck disable=SC1090
-        source "$HOME/miniforge/etc/profile.d/conda.sh"
-        return 0
-    fi
     if command -v conda &>/dev/null; then
         return 0
     fi
+
+    # Hook conda into current shell if available
+    if [ -f "$HOME/miniforge/etc/profile.d/conda.sh" ]; then
+        # shellcheck disable=SC1090
+        source "$HOME/miniforge/etc/profile.d/conda.sh"
+        export PATH="$HOME/miniforge/bin:$PATH"
+        return 0
+
+    if [ -x "$HOME/miniforge/bin/conda" ]; then
+        # shellcheck disable=SC1090
+        source "$HOME/miniforge/etc/profile.d/conda.sh"
+        export PATH="$HOME/miniforge/bin:$PATH"
+        return 0
+    fi
+
     echo -e "${YELLOW}Conda not found in PATH. Some operations (create env, conda faiss-gpu) will be unavailable.${NC}"
     return 1
 }
@@ -380,6 +390,8 @@ switch_env() {
         echo -e "${YELLOW}No env given.${NC}"
         return 1
     fi
+
+    ensure_conda
 
     # If conda exists, check env presence via conda; otherwise check miniforge env dir
     if command -v conda &>/dev/null; then
