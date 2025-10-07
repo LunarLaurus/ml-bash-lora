@@ -6,34 +6,40 @@ source "$PROJECT_ROOT/cuda/detect_cuda.sh"
 # Helpers: ensure PYTHON_CMD/PIP_CMD point to current (activated) env
 # ------------------------------
 ensure_python_cmd() {
-    # If already set and valid, keep it
-    if [ -n "${PYTHON_CMD:-}" ] && command -v "$PYTHON_CMD" &>/dev/null; then
+    # Already set and valid?
+    if [ -n "${PYTHON_CMD:-}" ] && [ -x "$PYTHON_CMD" ]; then
         return 0
     fi
 
-    # Prefer python on PATH (assumes user has activated the env in the current shell)
-    if command -v python &>/dev/null; then
-        PYTHON_CMD="$(command -v python)"
-        PIP_CMD="$PYTHON_CMD -m pip"
-        return 0
-    fi
-
-    # If ML_ENV_FILE exists, we can try to locate the env python under miniforge envs
+    # Try ML_ENV_FILE
     if [ -f "$ML_ENV_FILE" ]; then
-        envname="$(cat "$ML_ENV_FILE")"
-        candidate="$HOME/miniforge/envs/$envname/bin/python"
+        get_active_env
+        candidate="$HOME/miniforge/envs/${CURRENT_ENV}/bin/python"
         if [ -x "$candidate" ]; then
             PYTHON_CMD="$candidate"
+            PIP_CMD="$PYTHON_CMD -m pip"
+            return 0
+        else
+            echo -e "${YELLOW}Warning: Python not found at $candidate. Environment may not exist.${NC}"
+        fi
+    fi
+
+    # Python on PATH
+    if command -v python &>/dev/null; then
+        PYTHON_CMD="$(command -v python)"
+        if [ -x "$PYTHON_CMD" ]; then
             PIP_CMD="$PYTHON_CMD -m pip"
             return 0
         fi
     fi
 
-    # Fallback: nothing usable
+    # Fallback
     PYTHON_CMD=""
     PIP_CMD=""
+    echo -e "${RED}No valid Python found in current shell or env.${NC}"
     return 1
 }
+
 
 # Wrapper to run Python inside current env; errors if python not available
 run_python_in_env() {
@@ -203,6 +209,7 @@ setup_gpu_cuda() {
 # Step 4: Install/ensure PyTorch - uses current env python/pip only
 # ------------------------------
 install_pytorch_if_missing() {
+    echo -e "${BLUE}Installing PyTorch stack into current env...${NC}"
     ensure_python_cmd || { echo -e "${RED}Python not found in active env. Activate env first.${NC}"; return 1; }
 
     if ! "$PYTHON_CMD" -c "import torch" &>/dev/null; then
@@ -218,6 +225,7 @@ install_pytorch_if_missing() {
 # Step 5: Install LoRA stack - pip into current env
 # ------------------------------
 install_lora_stack() {
+    echo -e "${BLUE}Installing LoRA stack into current env...${NC}"
     ensure_python_cmd || { echo -e "${RED}Python not found. Activate env first.${NC}"; return 1; }
     detect_cuda >/dev/null 2>&1 || echo -e "${YELLOW}Warning: CUDA not detected; CPU wheel will be used.${NC}"
 
@@ -248,6 +256,7 @@ install_lora_stack() {
 # Step 6: Install RAG stack - prefer GPU faiss only when conda available; else fall back to pip CPU
 # ------------------------------
 install_rag_stack() {
+    echo -e "${BLUE}Installing RAG stack into current env...${NC}"
     ensure_python_cmd || { echo -e "${RED}Python not found. Activate env first.${NC}"; return 1; }
     detect_cuda >/dev/null 2>&1 || echo -e "${YELLOW}Warning: CUDA not detected; CPU wheel will be used.${NC}"
 
