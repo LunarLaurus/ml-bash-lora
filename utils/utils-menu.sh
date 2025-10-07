@@ -59,13 +59,13 @@ install_python_packages_conda() {
         echo -e "${YELLOW}No packages specified.${NC}"
         return 1
     fi
-    echo -e "${GREEN}Installing Python packages into conda env '$CURRENT_ENV': $*${NC}"
+    echo -e "${BCYAN}Installing Python packages into conda env '$CURRENT_ENV': $*${NC}"
     # Use conda run pip to avoid activating subshell
     conda run -n "$CURRENT_ENV" python -m pip install --upgrade "$@" || {
         echo -e "${YELLOW}pip install reported errors. Try running inside the env manually for more details.${NC}"
         return 1
     }
-    echo -e "${GREEN}Done.${NC}"
+    echo -e "${BCYAN}Done.${NC}"
 }
 
 # Some small curated pip groups (opt-in)
@@ -122,7 +122,7 @@ list_lora_lib_versions() {
         error_no_env
         return 1
     fi
-    echo -e "${GREEN}LoRA-related package versions in '$CURRENT_ENV':${NC}"
+    echo -e "${BCYAN}LoRA-related package versions in '$CURRENT_ENV':${NC}"
     conda run -n "$CURRENT_ENV" python - <<'PY'
 import importlib
 pkgs = ["transformers","peft","bitsandbytes","accelerate","datasets","safetensors"]
@@ -141,7 +141,7 @@ list_rag_lib_versions() {
         error_no_env
         return 1
     fi
-    echo -e "${GREEN}RAG-related package versions in '$CURRENT_ENV':${NC}"
+    echo -e "${BCYAN}RAG-related package versions in '$CURRENT_ENV':${NC}"
     conda run -n "$CURRENT_ENV" python - <<'PY'
 import importlib
 pkgs = ["faiss","faiss_cpu","sentence_transformers","langchain","sentencepiece"]
@@ -161,7 +161,7 @@ PY
 # Menu
 # ------------------------------
 while true; do
-    echo -e "\n${GREEN}=== Diagnostics & Utilities (selective) ===${NC}"
+    echo -e "\n${CYAN}=== Diagnostics & Utilities (selective) ===${NC}"
     echo "---- Apt single installs ----"
     echo "10) Install git"
     echo "11) Install git-lfs"
@@ -181,7 +181,7 @@ while true; do
     echo "40) Find largest projects/directories"
     echo "50) List LoRA lib versions (in active conda env)"
     echo "51) List RAG lib versions (in active conda env)"
-    echo "0) Back to Main Menu"
+    echo -e "${BRED}0) Back to Main Menu${NC}"
 
     read -rp "Choice: " choice
     case $choice in

@@ -6,12 +6,12 @@ while true; do
     echo -e "\n${GREEN}===== ML/LoRA + RAG Main Menu =====${NC}"
     check_env || true
 
-    echo -e "1) NVIDIA Drivers"
-    echo -e "2) CUDA Toolkit"
-    echo -e "3) Conda / ML Environments"
-    echo -e "4) Diagnostics"
-    echo -e "5) Utilities"
-    echo -e "${RED}0) Exit${NC}"
+    echo -e "${BGREEN}1) NVIDIA Drivers"
+    echo -e "${BGREEN}2) CUDA Toolkit"
+    echo -e "${BCYAN}3) Conda / ML Environments"
+    echo -e "${YELLOW}4) Diagnostics"
+    echo -e "${CYAN}5) Utilities"
+    echo -e "${BRED}0) Exit${NC}"
 
     read -rp "Choice: " choice
     case $choice in

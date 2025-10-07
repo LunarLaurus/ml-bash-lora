@@ -3,11 +3,11 @@ source "$PROJECT_ROOT/helpers.sh"
 update_script_dir 2
 
 install_drivers() {
-    echo -e "${GREEN}Updating system and installing NVIDIA drivers...${NC}"
+    echo -e "${BGREEN}Updating system and installing NVIDIA drivers...${NC}"
     sudo apt update && sudo apt upgrade -y
     sudo ubuntu-drivers devices
     sudo ubuntu-drivers autoinstall
-    echo -e "${GREEN}Drivers installed. Reboot recommended.${NC}"
+    echo -e "${BGREEN}Drivers installed. Reboot recommended.${NC}"
 }
 
 show_nvidia_smi() {
@@ -19,10 +19,10 @@ show_nvidia_smi() {
 }
 
 while true; do
-    echo -e "\n${GREEN}=== NVIDIA Drivers Menu ===${NC}"
+    echo -e "\n${BGREEN}=== NVIDIA Drivers Menu ===${NC}"
     echo "1) Install/Update NVIDIA drivers"
     echo "2) Show Nvidia-SMI"
-    echo "0) Back to Main Menu"
+    echo -e "${BRED}0) Back to Main Menu${NC}"
 
     read -rp "Choice: " choice
     case $choice in

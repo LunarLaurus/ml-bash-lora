@@ -8,9 +8,9 @@ show_disk_usage() {
 }
 
 while true; do
-    echo -e "\n${GREEN}=== Diagnostics Menu ===${NC}"
+    echo -e "\n${YELLOW}=== Diagnostics Menu ===${NC}"
     echo "1) Show Disk Usage"
-    echo "0) Back to Main Menu"
+    echo -e "${BRED}0) Back to Main Menu${NC}"
 
     read -rp "Choice: " choice
     case $choice in

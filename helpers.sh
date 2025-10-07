@@ -7,10 +7,24 @@ CUDA_SUPPORTED=("11.8" "12.1" "12.2" "12.3" "12.4" "12.6" "12.8" "12.9")
 # ------------------------------
 # Colors
 # ------------------------------
+# Standard Colors
 RED='\033[0;31m'
 YELLOW='\033[0;33m'
 GREEN='\033[0;32m'
-NC='\033[0m'
+BLUE='\033[0;34m'
+MAGENTA='\033[0;35m'
+CYAN='\033[0;36m'
+WHITE='\033[0;37m'
+# Bright / Bold variants
+BRED='\033[1;31m'
+BYELLOW='\033[1;33m'
+BGREEN='\033[1;32m'
+BBLUE='\033[1;34m'
+BMAGENTA='\033[1;35m'
+BCYAN='\033[1;36m'
+BWHITE='\033[1;37m'
+NC='\033[0m'  # No Color
+
 
 # ------------------------------
 # Environment file

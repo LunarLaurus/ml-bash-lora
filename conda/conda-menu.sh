@@ -17,7 +17,7 @@ env_disk_usage() {
 }
 
 while true; do
-    echo -e "\n${GREEN}=== Conda / ML Environment Menu ===${NC}"
+    echo -e "\n${BCYAN}=== Conda / ML Environment Menu ===${NC}"
     echo "0) Install Miniforge (Conda)"
     echo
     echo "10) Environment creation / activation"
@@ -41,7 +41,7 @@ while true; do
     echo "0X) Quick full run"
     echo "    40) Run full setup (create+activate+all installs+validate)"
     echo
-    echo "0) Back to Main Menu"
+    echo -e "${BRED}0) Back to Main Menu${NC}"
 
     read -rp "Choice: " choice
     case $choice in
