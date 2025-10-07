@@ -84,6 +84,7 @@ ensure_conda() {
         source "$HOME/miniforge/etc/profile.d/conda.sh"
         export PATH="$HOME/miniforge/bin:$PATH"
         return 0
+    fi
 
     if [ -x "$HOME/miniforge/bin/conda" ]; then
         # shellcheck disable=SC1090
