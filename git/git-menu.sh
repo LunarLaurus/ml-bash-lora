@@ -32,7 +32,7 @@ clone_repo() {
     list_repos
     read -rp "Enter repo index or folder name to clone (or 'q' to cancel): " sel
     [ "$sel" = "q" ] && return 0
-
+    
     local url=""
     # if numeric index
     if [[ "$sel" =~ ^[0-9]+$ ]]; then
@@ -54,14 +54,14 @@ clone_repo() {
             return 1
         fi
     fi
-
+    
     local folder
     folder="$(repo_folder_from_url "$url")"
     if [ -d "$folder" ]; then
         echo -e "${BRED}Folder '$folder' already exists. Skipping clone.${NC}"
         return 1
     fi
-
+    
     echo -e "${BGREEN}Cloning $url into ./$folder ...${NC}"
     git clone "$url" "$folder"
     echo -e "${BGREEN}Clone finished.${NC}"
@@ -88,7 +88,7 @@ update_repo() {
     list_repos
     read -rp "Enter repo index or folder name to update (or 'all' to update all, 'q' to cancel): " sel
     [ "$sel" = "q" ] && return 0
-
+    
     if [ "$sel" = "all" ]; then
         for url in "${poke_repos_mainline[@]}"; do
             folder="$(repo_folder_from_url "$url")"
@@ -101,7 +101,7 @@ update_repo() {
         done
         return 0
     fi
-
+    
     local url=""
     if [[ "$sel" =~ ^[0-9]+$ ]]; then
         if (( sel < 0 || sel >= ${#poke_repos_mainline[@]} )); then
@@ -126,7 +126,7 @@ update_repo() {
         echo -e "${BRED}Repo '$folder' not cloned (folder missing)${NC}"
         return 1
     fi
-
+    
     echo -e "${BGREEN}Running git pull in $folder ...${NC}"
     (cd "$folder" && git pull --ff-only) || echo -e "${BRED}git pull failed for $folder${NC}"
 }
@@ -136,7 +136,7 @@ repo_status() {
     list_repos
     read -rp "Enter repo index or folder name to show status (or 'q' to cancel): " sel
     [ "$sel" = "q" ] && return 0
-
+    
     local url=""
     if [[ "$sel" =~ ^[0-9]+$ ]]; then
         if (( sel < 0 || sel >= ${#poke_repos_mainline[@]} )); then
@@ -161,7 +161,7 @@ repo_status() {
         echo -e "${BRED}Repo '$folder' not cloned (folder missing)${NC}"
         return 1
     fi
-
+    
     (cd "$folder" && echo -e "${BGREEN}== $folder status ==${NC}" && git status -s)
 }
 
@@ -170,7 +170,7 @@ delete_repo() {
     list_repos
     read -rp "Enter repo index or folder name to delete (local folder only) (or 'q' to cancel): " sel
     [ "$sel" = "q" ] && return 0
-
+    
     local folder=""
     if [[ "$sel" =~ ^[0-9]+$ ]]; then
         if (( sel < 0 || sel >= ${#poke_repos_mainline[@]} )); then
@@ -183,12 +183,12 @@ delete_repo() {
         # assume folder name
         folder="$sel"
     fi
-
+    
     if [ ! -d "$folder" ]; then
         echo -e "${BRED}Folder '$folder' does not exist locally.${NC}"
         return 1
     fi
-
+    
     read -rp "Are you sure you want to DELETE the local folder '$folder'? This cannot be undone. (y/N): " confirm
     if [[ "$confirm" =~ ^[Yy]$ ]]; then
         rm -rf -- "$folder"
@@ -203,7 +203,7 @@ open_repo_shell() {
     list_repos
     read -rp "Enter repo index or folder name to open a subshell in (or 'q' to cancel): " sel
     [ "$sel" = "q" ] && return 0
-
+    
     local url=""
     if [[ "$sel" =~ ^[0-9]+$ ]]; then
         if (( sel < 0 || sel >= ${#poke_repos_mainline[@]} )); then
@@ -224,16 +224,16 @@ open_repo_shell() {
             folder="$sel"
         fi
     fi
-
+    
     if [ -z "${folder:-}" ]; then
         folder="$(repo_folder_from_url "$url")"
     fi
-
+    
     if [ ! -d "$folder" ]; then
         echo -e "${BRED}Folder '$folder' does not exist.${NC}"
         return 1
     fi
-
+    
     echo -e "${BGREEN}Spawning subshell in ./$folder (type exit to return)...${NC}"
     cd "$folder" || return 1
     bash --login
@@ -248,7 +248,7 @@ extract_code_dataset() {
     list_repos
     read -rp "Enter repo index or folder name to extract (or 'q' to cancel): " sel
     [ "$sel" = "q" ] && return 0
-
+    
     local url folder
     if [[ "$sel" =~ ^[0-9]+$ ]]; then
         if (( sel < 0 || sel >= ${#poke_repos_mainline[@]} )); then
@@ -267,14 +267,14 @@ extract_code_dataset() {
             fi
         done
     fi
-
+    
     if [ ! -d "$folder" ]; then
         echo -e "${BRED}Folder '$folder' does not exist locally. Clone it first.${NC}"
         return 1
     fi
-
+    
     ensure_python_cmd || { echo -e "${RED}Python not found.${NC}"; return 1; }
-
+    
     # Check Python dependencies
     local missing_deps=()
     for dep in tree_sitter tqdm; do
@@ -282,7 +282,7 @@ extract_code_dataset() {
             missing_deps+=("$dep")
         fi
     done
-
+    
     if [ ${#missing_deps[@]} -gt 0 ]; then
         echo -e "${BRED}Missing Python dependencies: ${missing_deps[*]}${NC}"
         SUGGESTED="${missing_deps[*]}"
@@ -293,43 +293,53 @@ extract_code_dataset() {
         }
         echo -e "${BGREEN}Dependencies installed successfully.${NC}"
     fi
-
+    
+    # -------------------------------
     # Prepare Tree-sitter languages (C and ASM)
+    # -------------------------------
+    
+    # Ensure tree-sitter CLI is installed
+    if ! command -v tree-sitter &>/dev/null; then
+        echo -e "${BGREEN}Installing tree-sitter CLI...${NC}"
+        sudo apt update && sudo apt install -y tree-sitter-cli
+    fi
+    
     local ts_build_dir="$SCRIPT_DIR/build"
     local ts_so="$ts_build_dir/my-languages.so"
     local ts_c_repo="$SCRIPT_DIR/tree-sitter-c"
     local ts_asm_repo="$SCRIPT_DIR/tree-sitter-asm"
-
+    
     mkdir -p "$ts_build_dir"
-
+    
     if [ ! -f "$ts_so" ]; then
         echo -e "${BGREEN}Building Tree-sitter languages (C + ASM)...${NC}"
-        # clone if missing
+        
+        # Clone grammar repos if missing
         [ ! -d "$ts_c_repo" ] && git clone https://github.com/tree-sitter/tree-sitter-c.git "$ts_c_repo"
         [ ! -d "$ts_asm_repo" ] && git clone https://github.com/RubixDev/tree-sitter-asm.git "$ts_asm_repo"
-
-        "$PYTHON_CMD" - <<EOF
-from tree_sitter import Language
-Language.build_library(
-    "$ts_so",
-    [
-        "$ts_c_repo",
-        "$ts_asm_repo"
-    ]
-)
-EOF
+        
+        # Build the shared library using tree-sitter CLI
+        tree-sitter generate "$ts_c_repo"
+        tree-sitter generate "$ts_asm_repo"
+        
+        gcc -shared -o "$ts_so" \
+        "$ts_c_repo/src/parser.c" \
+        "$ts_asm_repo/src/parser.c" \
+        -fPIC
+        
         if [ $? -ne 0 ]; then
             echo -e "${BRED}Failed to build Tree-sitter languages${NC}"
             return 1
         fi
     fi
-
+    
+    
     # Set output file
     local output_file="${folder}_dataset.jsonl"
-
+    
     echo -e "${BGREEN}Extracting code dataset from '$folder' into '$output_file'...${NC}"
     "$PYTHON_CMD" "$SCRIPT_DIR/process-repo.py" "$folder" --out "$output_file" --ts_so "$ts_so"
-
+    
     if [ $? -eq 0 ]; then
         echo -e "${BGREEN}Extraction complete! Dataset saved to '$output_file'${NC}"
     else
@@ -344,7 +354,7 @@ train_repo_lora() {
     list_repos
     read -rp "Enter repo index or folder name to train LoRA (or 'q' to cancel): " sel
     [ "$sel" = "q" ] && return 0
-
+    
     local folder dataset output
     if [[ "$sel" =~ ^[0-9]+$ ]]; then
         if (( sel < 0 || sel >= ${#poke_repos_mainline[@]} )); then
@@ -355,15 +365,15 @@ train_repo_lora() {
     else
         folder="$sel"
     fi
-
+    
     dataset="${folder}_dataset.jsonl"
     output="./lora_${folder}"
-
+    
     if [ ! -f "$dataset" ]; then
         echo -e "${BRED}Dataset file '$dataset' not found. Run extraction first.${NC}"
         return 1
     fi
-
+    
     # Check Python dependencies
     local missing_deps=()
     for dep in transformers datasets peft torch tqdm; do
@@ -381,7 +391,7 @@ train_repo_lora() {
         }
         echo -e "${BGREEN}Dependencies installed successfully.${NC}"
     fi
-
+    
     echo -e "${BGREEN}Starting LoRA fine-tuning for '$folder'...${NC}"
     "$PYTHON_CMD" "$SCRIPT_DIR/lora_train_repo.py" "$dataset" --output_dir "$output"
     echo -e "${BGREEN}LoRA training finished. Adapter saved to '$output'${NC}"
@@ -400,7 +410,7 @@ while true; do
     echo "8) Extract code dataset from repo"
     echo "9) Fine-tune LoRA on a repo dataset"
     echo -e "${BRED}0) Back to Main Menu${NC}"
-
+    
     read -rp "Choice: " choice
     case $choice in
         1) list_repos ;;
