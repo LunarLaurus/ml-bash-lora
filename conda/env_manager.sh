@@ -8,38 +8,54 @@ source "$PROJECT_ROOT/cuda/detect_cuda.sh"
 ensure_python_cmd() {
     # Already set and valid?
     if [ -n "${PYTHON_CMD:-}" ] && [ -x "$PYTHON_CMD" ]; then
-        return 0
+        if ! command -v "$PYTHON_CMD" &>/dev/null; then
+            echo -e "${YELLOW}Warning: PYTHON_CMD exists but not executable. Resetting.${NC}"
+            PYTHON_CMD=""
+            PIP_CMD=()
+        else
+            return 0
+        fi
     fi
 
     # Try ML_ENV_FILE
     if [ -f "$ML_ENV_FILE" ]; then
-        get_active_env
+        get_active_env || true
         candidate="$HOME/miniforge/envs/${CURRENT_ENV}/bin/python"
         if [ -x "$candidate" ]; then
             PYTHON_CMD="$candidate"
-            PIP_CMD="$PYTHON_CMD -m pip"
-            return 0
         else
-            echo -e "${YELLOW}Warning: Python not found at $candidate. Environment may not exist.${NC}"
+            echo -e "${YELLOW}Python not found at $candidate${NC}"
         fi
     fi
 
     # Python on PATH
-    if command -v python &>/dev/null; then
+    if [ -z "${PYTHON_CMD:-}" ] && command -v python &>/dev/null; then
         PYTHON_CMD="$(command -v python)"
-        if [ -x "$PYTHON_CMD" ]; then
-            PIP_CMD="$PYTHON_CMD -m pip"
-            return 0
-        fi
     fi
 
-    # Fallback
-    PYTHON_CMD=""
-    PIP_CMD=""
-    echo -e "${RED}No valid Python found in current shell or env.${NC}"
-    return 1
-}
+    # Check final python
+    if [ -z "${PYTHON_CMD:-}" ] || [ ! -x "$PYTHON_CMD" ]; then
+        echo -e "${RED}No valid Python found in current shell or env.${NC}"
+        PYTHON_CMD=""
+        PIP_CMD=()
+        return 1
+    fi
 
+    # Set pip as array to avoid quoting issues
+    PIP_CMD=("$PYTHON_CMD" "-m" "pip")
+
+    # Ensure pip is installed
+    if ! "${PIP_CMD[@]}" --version &>/dev/null; then
+        echo -e "${YELLOW}pip not found; bootstrapping pip in this Python...${NC}"
+        "$PYTHON_CMD" -m ensurepip --upgrade || {
+            echo -e "${RED}Failed to bootstrap pip${NC}"
+            PIP_CMD=()
+            return 1
+        }
+    fi
+
+    return 0
+}
 
 # Wrapper to run Python inside current env; errors if python not available
 run_python_in_env() {
