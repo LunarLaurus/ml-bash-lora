@@ -298,7 +298,7 @@ extract_code_dataset() {
     local output_file="${folder}_dataset.jsonl"
 
     echo -e "${BGREEN}Extracting code dataset from '$folder' into '$output_file'...${NC}"
-    "$PYTHON_CMD" "$SCRIPT_DIR/extract_code_dataset.py" "$folder" --out "$output_file"
+    "$PYTHON_CMD" "$SCRIPT_DIR/process-repo.py" "$folder" --out "$output_file"
 
     if [ $? -eq 0 ]; then
         echo -e "${BGREEN}Extraction complete! Dataset saved to '$output_file'${NC}"
