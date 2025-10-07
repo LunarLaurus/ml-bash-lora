@@ -219,6 +219,7 @@ install_pytorch_if_missing() {
 # ------------------------------
 install_lora_stack() {
     ensure_python_cmd || { echo -e "${RED}Python not found. Activate env first.${NC}"; return 1; }
+    detect_cuda >/dev/null 2>&1 || echo -e "${YELLOW}Warning: CUDA not detected; CPU wheel will be used.${NC}"
 
     local pkgs=(transformers peft datasets accelerate)
     for pkg in "${pkgs[@]}"; do
@@ -248,6 +249,7 @@ install_lora_stack() {
 # ------------------------------
 install_rag_stack() {
     ensure_python_cmd || { echo -e "${RED}Python not found. Activate env first.${NC}"; return 1; }
+    detect_cuda >/dev/null 2>&1 || echo -e "${YELLOW}Warning: CUDA not detected; CPU wheel will be used.${NC}"
 
     read -rp "Install RAG stack (faiss, sentence-transformers, langchain)? [y/N]: " rag
     if [[ ! "$rag" =~ ^[Yy]$ ]]; then
@@ -359,6 +361,7 @@ switch_env() {
     fi
 
     save_env "$NEW_ENV"
+    ensure_python_cmd || echo -e "${YELLOW}Warning: PYTHON_CMD/PIP_CMD may not be valid after switching.${NC}"
     echo -e "${GREEN}Active environment updated to '$NEW_ENV' (saved to $ML_ENV_FILE).${NC}"
     if command -v conda &>/dev/null; then
         echo -e "${GREEN}Run: conda activate $NEW_ENV${NC} to actually activate it in this shell."
@@ -388,7 +391,8 @@ show_python_version() {
 # ------------------------------
 select_pytorch_wheel() {
     # Ensure CUDA is detected and persisted if missing
-    detect_cuda --persist || true
+    detect_cuda >/dev/null 2>&1 || echo -e "${YELLOW}Warning: CUDA not detected; CPU wheel will be used.${NC}"
+
 
     # Use the Python from the active conda env
     # PYTHON_CMD=$(which python)
