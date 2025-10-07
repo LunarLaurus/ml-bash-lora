@@ -241,6 +241,73 @@ open_repo_shell() {
     cd "$SCRIPT_DIR" || true
 }
 
+# robust download of latest tree-sitter linux binary (arch-aware)
+download_tree_sitter() {
+    local BUILD_DIR="$SCRIPT_DIR/build"
+    local TS_BIN="$BUILD_DIR/tree-sitter"
+    local RETRIES=3
+    local SLEEP=2
+    
+    mkdir -p "$BUILD_DIR" || {
+        echo "[ERROR] Failed to create build dir: $BUILD_DIR"
+        return 1
+    }
+    
+    # quick sanity: check free space (at least 10MB)
+    local avail_kb
+    avail_kb=$(df --output=avail -k "$BUILD_DIR" 2>/dev/null | tail -n1 || echo 0)
+    if [ -z "$avail_kb" ]; then avail_kb=0; fi
+    if [ "$avail_kb" -lt 10240 ]; then
+        echo "[ERROR] Not enough disk space in $BUILD_DIR (need ~10MB). Available: ${avail_kb}KB"
+        return 1
+    fi
+    
+    # find asset URL for local arch (x64/arm64)
+    local arch asset_sub TS_URL tmpfile rc
+    arch="$(uname -m)"
+    case "$arch" in
+        x86_64|amd64) asset_sub="tree-sitter-linux-x64" ;;
+        aarch64|arm64) asset_sub="tree-sitter-linux-arm64" ;;
+        armv7l) asset_sub="tree-sitter-linux-armv7" ;;
+        *)
+            echo "[ERROR] Unsupported architecture: $arch"
+            return 1
+        ;;
+    esac
+    
+    TS_URL=$(curl -s "https://api.github.com/repos/tree-sitter/tree-sitter/releases/latest" \
+    | grep "browser_download_url" | grep "$asset_sub" | head -n1 | cut -d '"' -f 4 || true)
+    
+    if [ -z "$TS_URL" ]; then
+        echo "[ERROR] Could not find tree-sitter release asset for '$asset_sub'"
+        return 1
+    fi
+    
+    tmpfile="${TS_BIN}.part"
+    
+    # try download with retries
+    for i in $(seq 1 $RETRIES); do
+        echo "[INFO] Downloading tree-sitter (attempt $i/$RETRIES) from: $TS_URL"
+        # use -f (fail on HTTP error), -L follow redirects, -C - to resume if partial downloaded
+        curl -fL --retry 3 --retry-delay 2 -o "$tmpfile" "$TS_URL"
+        rc=$?
+        if [ $rc -eq 0 ]; then
+            # atomic move
+            mv -f "$tmpfile" "$TS_BIN"
+            chmod +x "$TS_BIN"
+            echo "[INFO] Download successful: $TS_BIN"
+            return 0
+        else
+            echo "[WARN] Download failed (curl exit $rc). Retrying in ${SLEEP}s..."
+            sleep $SLEEP
+        fi
+    done
+    
+    echo "[ERROR] Failed to download tree-sitter after $RETRIES attempts."
+    [ -f "$tmpfile" ] && rm -f "$tmpfile"
+    return 1
+}
+
 # -------------------------------
 # Extract code dataset from a repo (updated for new tree-sitter API)
 # -------------------------------
@@ -297,65 +364,16 @@ extract_code_dataset() {
     # -------------------------------
     # Prepare Tree-sitter languages (C and ASM)
     # -------------------------------
+    mkdir -p "$SCRIPT_DIR/build"
+    download_tree_sitter || {
+        echo "[ERROR] Could not obtain tree-sitter CLI. Aborting."
+        return 1
+    }
     
-    # Map uname -m to tree-sitter asset substring
-    arch="$(uname -m)"
-    case "$arch" in
-        x86_64|amd64) ASSET_SUB="tree-sitter-linux-x64" ;;
-        aarch64|arm64) ASSET_SUB="tree-sitter-linux-arm64" ;;
-        armv7l) ASSET_SUB="tree-sitter-linux-armv7" ;;
-        *)
-            echo "[ERROR] Unsupported architecture: $arch"
-            echo "Please install tree-sitter CLI manually (via cargo or download the right binary)."
-            exit 1
-        ;;
-    esac
+    export PATH="$SCRIPT_DIR/build:$PATH"
+    # verify it runs
+    "$SCRIPT_DIR/build/tree-sitter" --version || { echo "[ERROR] tree-sitter binary failed to run"; return 1; }
     
-    echo "[INFO] Detected arch: $arch -> looking for asset containing: $ASSET_SUB"
-    
-    # Get the download URL for the latest release matching arch
-    TS_URL=$(curl -s "https://api.github.com/repos/tree-sitter/tree-sitter/releases/latest" \
-        | grep "browser_download_url" \
-        | grep "$ASSET_SUB" \
-        | head -n1 \
-    | cut -d '"' -f 4 || true)
-    
-    if [ -z "$TS_URL" ]; then
-        echo "[ERROR] Could not find a tree-sitter release asset matching '$ASSET_SUB'."
-        echo "List available assets:"
-        curl -s "https://api.github.com/repos/tree-sitter/tree-sitter/releases/latest" | grep "browser_download_url" | sed -n '1,200p'
-        exit 1
-    fi
-    
-    echo "[INFO] Downloading tree-sitter from: $TS_URL"
-    curl -L -o "$TS_BIN" "$TS_URL"
-    chmod +x "$TS_BIN"
-    
-    # Verify binary
-    file_out="$(file "$TS_BIN")"
-    echo "[INFO] 'file' output: $file_out"
-    
-    # Quick sanity checks - ensure it's an ELF binary and not for wrong arch
-    if ! echo "$file_out" | grep -q "ELF"; then
-        echo "[ERROR] Downloaded file is not an ELF binary. Aborting."
-        exit 1
-    fi
-    
-    # Check for arch keywords in file output (best-effort)
-    if [[ "$arch" == "x86_64" ]] && ! echo "$file_out" | grep -qiE "x86-64|x86_64|Intel 80386|i386"; then
-        echo "[WARNING] Binary does not appear to be x86_64. file output: $file_out"
-    fi
-    if [[ "$arch" == "aarch64" || "$arch" == "arm64" ]] && ! echo "$file_out" | grep -qi "ARM"; then
-        echo "[WARNING] Binary does not appear to be ARM. file output: $file_out"
-    fi
-    
-    # Make sure we can execute it (some systems/containers still block)
-    if ! "$TS_BIN" --version &>/dev/null; then
-        echo "[ERROR] tree-sitter binary failed to run. file output: $file_out"
-        echo "Try running: $TS_BIN --version"
-        exit 1
-    fi
-    echo "[INFO] tree-sitter CLI is ready: $($TS_BIN --version 2>/dev/null || true)"
     
     # Ensure grammar repos (clone if missing)
     [ ! -d "$TS_C_REPO" ] && git clone https://github.com/tree-sitter/tree-sitter-c.git "$TS_C_REPO"
