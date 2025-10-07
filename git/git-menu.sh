@@ -298,47 +298,57 @@ extract_code_dataset() {
     # Prepare Tree-sitter languages (C and ASM)
     # -------------------------------
     
-    # Ensure tree-sitter CLI is installed
-    if ! command -v tree-sitter &>/dev/null; then
-        echo -e "${BGREEN}Installing tree-sitter CLI...${NC}"
-        sudo apt update && sudo apt install -y tree-sitter-cli
-    fi
-    
-    local ts_build_dir="$SCRIPT_DIR/build"
-    local ts_so="$ts_build_dir/my-languages.so"
-    local ts_c_repo="$SCRIPT_DIR/tree-sitter-c"
-    local ts_asm_repo="$SCRIPT_DIR/tree-sitter-asm"
-    
-    mkdir -p "$ts_build_dir"
-    
-    if [ ! -f "$ts_so" ]; then
-        echo -e "${BGREEN}Building Tree-sitter languages (C + ASM)...${NC}"
+    # -------------------------------
+    # Step 1: Download latest Linux x64 Tree-sitter CLI
+    # -------------------------------
+    if [ ! -f "$TS_BIN" ]; then
+        echo -e "\n[INFO] Downloading latest Tree-sitter CLI (Linux x64)..."
         
-        # Clone grammar repos if missing
-        [ ! -d "$ts_c_repo" ] && git clone https://github.com/tree-sitter/tree-sitter-c.git "$ts_c_repo"
-        [ ! -d "$ts_asm_repo" ] && git clone https://github.com/RubixDev/tree-sitter-asm.git "$ts_asm_repo"
+        # Get latest release URL
+        TS_URL=$(curl -s https://api.github.com/repos/tree-sitter/tree-sitter/releases/latest \
+            | grep "browser_download_url" \
+            | grep "tree-sitter-linux-x64" \
+        | cut -d '"' -f 4)
         
-        # Build the shared library using tree-sitter CLI
-        tree-sitter generate "$ts_c_repo"
-        tree-sitter generate "$ts_asm_repo"
-        
-        gcc -shared -o "$ts_so" \
-        "$ts_c_repo/src/parser.c" \
-        "$ts_asm_repo/src/parser.c" \
-        -fPIC
-        
-        if [ $? -ne 0 ]; then
-            echo -e "${BRED}Failed to build Tree-sitter languages${NC}"
-            return 1
+        if [ -z "$TS_URL" ]; then
+            echo "[ERROR] Could not fetch latest Tree-sitter CLI URL"
+            exit 1
         fi
+        
+        curl -L -o "$TS_BIN" "$TS_URL"
+        chmod +x "$TS_BIN"
     fi
     
+    export PATH="$BUILD_DIR:$PATH"
+    
+    # -------------------------------
+    # Step 2: Clone grammar repos if missing
+    # -------------------------------
+    [ ! -d "$TS_C_REPO" ] && git clone https://github.com/tree-sitter/tree-sitter-c.git "$TS_C_REPO"
+    [ ! -d "$TS_ASM_REPO" ] && git clone https://github.com/RubixDev/tree-sitter-asm.git "$TS_ASM_REPO"
+    
+    # -------------------------------
+    # Step 3: Generate parsers
+    # -------------------------------
+    "$TS_BIN" generate "$TS_C_REPO"
+    "$TS_BIN" generate "$TS_ASM_REPO"
+    
+    # -------------------------------
+    # Step 4: Build shared library (.so)
+    # -------------------------------
+    mkdir -p "$BUILD_DIR"
+    gcc -shared -o "$TS_SO" \
+    "$TS_C_REPO/src/parser.c" \
+    "$TS_ASM_REPO/src/parser.c" \
+    -fPIC
+    
+    echo -e "\n[INFO] Tree-sitter build complete. Shared library at $TS_SO"
     
     # Set output file
     local output_file="${folder}_dataset.jsonl"
     
     echo -e "${BGREEN}Extracting code dataset from '$folder' into '$output_file'...${NC}"
-    "$PYTHON_CMD" "$SCRIPT_DIR/process-repo.py" "$folder" --out "$output_file" --ts_so "$ts_so"
+    "$PYTHON_CMD" "$SCRIPT_DIR/process-repo.py" "$folder" --out "$output_file" --ts_so "$TS_SO"
     
     if [ $? -eq 0 ]; then
         echo -e "${BGREEN}Extraction complete! Dataset saved to '$output_file'${NC}"
