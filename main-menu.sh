@@ -9,8 +9,9 @@ while true; do
     echo -e "${BGREEN}1) NVIDIA Drivers"
     echo -e "${BGREEN}2) CUDA Toolkit"
     echo -e "${BCYAN}3) Conda / ML Environments"
-    echo -e "${YELLOW}4) Diagnostics"
-    echo -e "${CYAN}5) Utilities"
+    echo -e "${YELLOW}4) Git/Pokemon"
+    echo -e "${YELLOW}5) Diagnostics"
+    echo -e "${CYAN}6) Utilities"
     echo -e "${BRED}0) Exit${NC}"
 
     read -rp "Choice: " choice
@@ -18,8 +19,9 @@ while true; do
         1) source ./drivers/drivers-menu.sh ;;
         2) source ./cuda/cuda-menu.sh ;;
         3) source ./conda/conda-menu.sh ;;
-        4) source ./diagnostics/diagnostics-menu.sh ;;
-        5) source ./utils/utils-menu.sh ;;
+        4) source ./git/git-menu.sh ;;
+        5) source ./diagnostics/diagnostics-menu.sh ;;
+        6) source ./utils/utils-menu.sh ;;
         0) echo "Exiting."; exit 0 ;;
         *) echo -e "${RED}Invalid option${NC}" ;;
     esac
