@@ -11,6 +11,27 @@ MISSING_PY_DEPS=()
 : "${TS_C_REPO:=${SCRIPT_DIR}/third_party/tree-sitter-c}"
 : "${TS_ASM_REPO:=${SCRIPT_DIR}/third_party/tree-sitter-asm}"
 
+declare -A NUMPY_VERSIONS=(
+    ["3.10"]="1.26.4"
+    ["3.11"]="1.26.4"
+)
+declare -A SCIPY_VERSIONS=(
+    ["3.10"]="1.15.3"
+    ["3.11"]="1.15.3"
+)
+declare -A SKLEARN_VERSIONS=(
+    ["3.10"]="1.7.2"
+    ["3.11"]="1.7.2"
+)
+declare -A TRANSFORMERS_VERSIONS=(
+    ["3.10"]="4.36.2"
+    ["3.11"]="4.36.2"
+)
+declare -A PEFT_VERSIONS=(
+    ["3.10"]="0.17.1"
+    ["3.11"]="0.17.1"
+)
+
 # ----------------------
 # Small helper functions
 # ----------------------
@@ -377,7 +398,7 @@ extract_code_dataset() {
         return 0
     fi
     resolve_selection_to_folder "$REPO_SEL" || return 1
-    ensure_python_cmd || { echo -e "${RED}Python not found. Activate env first.${NC}"; return 1; }
+    ensure_python_cmd || { error -e "${RED}Python not found. Activate env first.${NC}"; return 1; }
     install_nvm
     
     check_python_deps tree_sitter tree-sitter-c tqdm
@@ -428,13 +449,25 @@ train_repo_lora() {
         return 1
     fi
     
+    NUMPY_VER="${NUMPY_VERSIONS[$PY_VER]}"
+    SCIPY_VER="${SCIPY_VERSIONS[$PY_VER]}"
+    SKLEARN_VER="${SKLEARN_VERSIONS[$PY_VER]}"
+    TRANSFORMERS_VER="${TRANSFORMERS_VERSIONS[$PY_VER]}"
+    PEFT_VER="${PEFT_VERSIONS[$PY_VER]}"
     
+    # Exit if Python version is not supported
+    if [[ -z "$NUMPY_VER" || -z "$SCIPY_VER" ]]; then
+        error "Unsupported Python version: $PY_VER"
+        exit 1
+    fi
     
-    #"${PIP_CMD[@]}" install --upgrade --force-reinstall numpy==1.26.4 scipy==1.11.3 scikit-learn==1.4.1
-    #\ transformers==4.57.0 peft==0.17.1 datasets==2.17.0 accelerate==1.10.1 bitsandbytes==0.41.0 safetensors==0.6.2 torch==2.8.0
-    
-    # Python 3.10 deps below?
-    "${PIP_CMD[@]}" install --upgrade --force-reinstall numpy==1.26.4 scipy==1.15.3 scikit-learn==1.7.2 transformers==4.36.2 peft==0.17.1
+    info "Installing Python dependencies..."
+    "${PIP_CMD[@]}" install --upgrade \
+    numpy=="$NUMPY_VER" \
+    scipy=="$SCIPY_VER" \
+    scikit-learn=="$SKLEARN_VER" \
+    transformers=="$TRANSFORMERS_VER" \
+    peft=="$PEFT_VER"
     
     
     check_python_deps transformers datasets peft torch tqdm numpy scipy scikit-learn

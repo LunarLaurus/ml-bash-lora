@@ -6,6 +6,9 @@ source "$PROJECT_ROOT/cuda/detect_cuda.sh"
 PYTHON_CMD=""
 PIP_CMD=()
 
+# Detect Python version
+PY_VER=""
+
 # ------------------------------
 # Helpers: ensure PYTHON_CMD/PIP_CMD point to current (activated) env
 # ------------------------------
@@ -17,6 +20,9 @@ ensure_python_cmd() {
             PYTHON_CMD=""
             PIP_CMD=()
         else
+            
+            PY_VER=$($PYTHON_CMD -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+            info "Detected Python version: $PY_VER"
             return 0
         fi
     fi
@@ -27,6 +33,9 @@ ensure_python_cmd() {
         candidate="$HOME/miniforge/envs/${CURRENT_ENV}/bin/python"
         if [ -x "$candidate" ]; then
             PYTHON_CMD="$candidate"
+            
+            PY_VER=$($PYTHON_CMD -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+            info "Detected Python version: $PY_VER"
         else
             echo -e "${YELLOW}Python not found at $candidate${NC}"
         fi
@@ -35,6 +44,9 @@ ensure_python_cmd() {
     # Python on PATH
     if [ -z "${PYTHON_CMD:-}" ] && command -v python &>/dev/null; then
         PYTHON_CMD="$(command -v python)"
+        
+        PY_VER=$($PYTHON_CMD -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+        info "Detected Python version: $PY_VER"
     fi
     
     # Check final python
