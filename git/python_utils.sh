@@ -428,6 +428,10 @@ train_repo_lora() {
         return 1
     fi
     
+    "${PIP_CMD[@]}" install --upgrade --force-reinstall numpy==1.26.4 scipy==1.11.3 scikit-learn==1.4.1
+    #\ transformers==4.57.0 peft==0.17.1 datasets==2.17.0 accelerate==1.10.1 bitsandbytes==0.41.0 safetensors==0.6.2 torch==2.8.0
+    
+    
     check_python_deps transformers datasets peft torch tqdm numpy scipy scikit-learn
     if [ ${#MISSING_PY_DEPS[@]} -gt 0 ]; then
         echo -e "${BRED}Missing Python dependencies: ${MISSING_PY_DEPS[*]}${NC}"
