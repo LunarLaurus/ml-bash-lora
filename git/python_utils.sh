@@ -106,9 +106,16 @@ download_with_resume() {
     return 1
 }
 
+install_node_npm() {
+    update_apt_cache
+    sudo apt install nodejs npm -y
+}
+
+
 # Public: install tree-sitter CLI (small composed steps)
 install_tree_sitter() {
     require_cmds curl mktemp mv chmod uname || return 1
+    require_cmds npm node || install_node_npm
     ensure_build_dir || return 1
     local asset_sub jsonfile asset_url
     asset_sub="$(arch_asset_sub)" || { error "Unsupported architecture $(uname -m)"; return 1; }
@@ -370,7 +377,7 @@ train_repo_lora() {
 }
 
 preflight_checks() {
-    require_cmds curl git gcc || return 1
+    require_cmds curl git gcc node npm || return 1
     ensure_build_dir || return 1
     info "Preflight checks passed"
     return 0
