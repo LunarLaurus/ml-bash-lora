@@ -298,9 +298,8 @@ extract_code_dataset() {
     fi
     resolve_selection_to_folder "$REPO_SEL" || return 1
     ensure_python_cmd || { echo -e "${RED}Python not found. Activate env first.${NC}"; return 1; }
-    
     check_python_deps tree_sitter tqdm
-    if [ ${#MISSING_PY_DEPS[@]:-0} -gt 0 ]; then
+    if [ "${#MISSING_PY_DEPS[@]}" -gt 0 ]; then
         echo -e "${BRED}Missing Python dependencies: ${MISSING_PY_DEPS[*]}${NC}"
         auto_install_python_deps || {
             echo -e "${BRED}Automatic installation failed. Please install manually:${NC} pip install ${MISSING_PY_DEPS[*]}"
