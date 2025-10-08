@@ -428,12 +428,7 @@ train_repo_lora() {
         return 1
     fi
     
-    if ! command -v "$PYTHON_CMD" >/dev/null 2>&1; then
-        error "Python not found: $PYTHON_CMD"
-        return 1
-    fi
-    
-    check_python_deps transformers datasets peft torch tqdm
+    check_python_deps transformers datasets peft torch tqdm numpy scipy scikit-learn
     if [ ${#MISSING_PY_DEPS[@]} -gt 0 ]; then
         echo -e "${BRED}Missing Python dependencies: ${MISSING_PY_DEPS[*]}${NC}"
         auto_install_python_deps || {
