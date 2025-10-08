@@ -4,6 +4,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="${SCRIPT_DIR}/build"
 TS_BIN="${BUILD_DIR}/tree-sitter"
 TS_SO="${BUILD_DIR}/my-languages.so"
+ACTIVE_NODE_VER=20
 
 # Configurable grammar repo locations (overrideable earlier if needed)
 : "${TS_C_REPO:=${SCRIPT_DIR}/third_party/tree-sitter-c}"
@@ -133,38 +134,27 @@ install_nvm() {
 
 # Prompt user for Node version if not supplied
 prompt_node_version() {
-    local __resultvar=$1
-    local version
-    read -r -p "Enter Node.js version (e.g., 18, 20, 20.6.0): " version
-    if [ -z "$version" ]; then
+    read -r -p "Enter Node.js version (e.g., 18, 20, 20.6.0): " ACTIVE_NODE_VER
+    if [ -z "$ACTIVE_NODE_VER" ]; then
         info "No version entered. Aborting."
         return 1
-    fi
-    if [ -n "$__resultvar" ]; then
-        eval "$__resultvar='$version'"
-    else
-        echo "$version"
     fi
     return 0
 }
 
 # Install Node.js version
 install_node() {
-    install_nvm
-    local version
-    prompt_node_version version || return 1
-    nvm install "$version"
-    nvm use "$version"
+    prompt_node_version || return 1
+    nvm install "$ACTIVE_NODE_VER"
+    nvm use "$ACTIVE_NODE_VER"
     info "Node $(node -v) and npm $(npm -v) are active"
 }
 
 # Use a Node.js version (interactive)
 use_node() {
-    install_nvm
-    local version
-    prompt_node_version version || return 1
-    if ! nvm use "$version" 2>/dev/null; then
-        warn "Node version $version not installed. Install first."
+    prompt_node_version || return 1
+    if ! nvm use "$ACTIVE_NODE_VER" 2>/dev/null; then
+        warn "Node version $ACTIVE_NODE_VER not installed. Install first."
         return 1
     fi
     info "Switched to Node $(node -v) and npm $(npm -v)"
@@ -172,25 +162,20 @@ use_node() {
 
 # Set default Node.js version (interactive)
 set_default_node() {
-    install_nvm
-    local version
-    prompt_node_version version || return 1
-    nvm alias default "$version"
-    info "Default Node set to $version"
+    prompt_node_version || return 1
+    nvm alias default "$ACTIVE_NODE_VER"
+    info "Default Node set to $ACTIVE_NODE_VER"
 }
 
 # Remove a Node.js version (interactive)
 remove_node() {
-    install_nvm
-    local version
-    prompt_node_version version || return 1
-    nvm uninstall "$version"
-    info "Removed Node version $version"
+    prompt_node_version || return 1
+    nvm uninstall "$ACTIVE_NODE_VER"
+    info "Removed Node version $ACTIVE_NODE_VER"
 }
 
 # List installed Node.js versions
 list_node_versions() {
-    install_nvm
     nvm ls
 }
 
