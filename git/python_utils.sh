@@ -447,6 +447,8 @@ train_repo_lora() {
         echo -e "${BGREEN}Dependencies installed successfully.${NC}"
     fi
     
+    "$PYTHON_CMD" -c "import torch; import transformers; import peft; import sklearn; import scipy; print('Python Deps: OK')"
+    
     info "Starting LoRA fine-tuning for '$FOLDER_PATH'..."
     run_python_file "$SCRIPT_DIR/lora_train_repo.py" "$dataset" --output_dir "$output" || {
         error "LoRA training failed"
