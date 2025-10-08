@@ -31,6 +31,20 @@ declare -A PEFT_VERSIONS=(
     ["3.10"]="0.17.1"
     ["3.11"]="0.17.1"
 )
+declare -A TORCH_VERSIONS=(
+    ["3.10"]="0.17.1"
+    ["3.11"]="0.17.1"
+)
+declare -A TORCH_VISION_VERSIONS=(
+    ["3.10"]="0.17.1"
+    ["3.11"]="0.17.1"
+)
+declare -A TORCH_AUDIO_VERSIONS=(
+    ["3.10"]="0.17.1"
+    ["3.11"]="0.17.1"
+)
+
+
 
 # ----------------------
 # Small helper functions
@@ -461,7 +475,7 @@ train_repo_lora() {
         exit 1
     fi
     
-    info "Installing Python dependencies..."
+    info "Installing potentially missing dependencies..."
     "${PIP_CMD[@]}" install --upgrade \
     numpy=="$NUMPY_VER" \
     scipy=="$SCIPY_VER" \
@@ -469,7 +483,33 @@ train_repo_lora() {
     transformers=="$TRANSFORMERS_VER" \
     peft=="$PEFT_VER"
     
+"$PYTHON_CMD" - <<PY
+import importlib
+
+packages = [
+    "numpy",
+    "scipy",
+    "sklearn",
+    "transformers",
+    "peft",
+    "torch",
+    "torchvision",
+    "torchaudio"
+]
+
+print("Installed package versions:")
+for pkg in packages:
+    try:
+        module = importlib.import_module(pkg)
+        print(f"{pkg}: {module.__version__}")
+    except ModuleNotFoundError:
+        print(f"{pkg}: NOT INSTALLED")
+PY
     
+    
+    "${PIP_CMD[@]}" install --upgrade --force-reinstall accelerate
+    
+    info "Checking dependencies..."
     check_python_deps transformers datasets peft torch tqdm numpy scipy scikit-learn
     if [ ${#MISSING_PY_DEPS[@]} -gt 0 ]; then
         echo -e "${BRED}Missing Python dependencies: ${MISSING_PY_DEPS[*]}${NC}"
