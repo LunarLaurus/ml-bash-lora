@@ -111,11 +111,84 @@ install_node_npm() {
     sudo apt install nodejs npm -y
 }
 
+remove_node_npm() {
+    sudo apt remove --purge nodejs npm
+    sudo apt autoremove
+    sudo rm -f /usr/bin/node /usr/bin/npm
+    sudo rm -f /usr/local/bin/node /usr/local/bin/npm
+}
+
+# Install nvm if not already installed
+install_nvm() {
+    if command -v nvm >/dev/null 2>&1; then
+        info "nvm already installed"
+        return 0
+    fi
+    info "Installing nvm..."
+    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+    export NVM_DIR="$([ -z "${XDG_CONFIG_HOME-}" ] && printf %s "${HOME}/.nvm" || printf %s "${XDG_CONFIG_HOME}/nvm")"
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+    info "nvm installed. Run 'nvm --version' to check"
+}
+
+# Install a specific Node.js version via nvm
+install_node() {
+    local version="$1"
+    if [ -z "$version" ]; then
+        info "Usage: install_node <version>"
+        return 1
+    fi
+    install_nvm
+    nvm install "$version"
+    nvm use "$version"
+    info "Node $(node -v) and npm $(npm -v) are active"
+}
+
+# Switch to a specific Node.js version
+use_node() {
+    local version="$1"
+    if [ -z "$version" ]; then
+        info "Usage: use_node <version>"
+        return 1
+    fi
+    install_nvm
+    nvm use "$version" || warn "Version $version not installed"
+}
+
+# Remove a specific Node.js version
+remove_node() {
+    local version="$1"
+    if [ -z "$version" ]; then
+        info "Usage: remove_node <version>"
+        return 1
+    fi
+    install_nvm
+    nvm uninstall "$version"
+    info "Removed Node version $version"
+}
+
+# Show all installed Node versions
+list_node_versions() {
+    install_nvm
+    nvm ls
+}
+
+# Set a default Node.js version
+set_default_node() {
+    local version="$1"
+    if [ -z "$version" ]; then
+        info "Usage: set_default_node <version>"
+        return 1
+    fi
+    install_nvm
+    nvm alias default "$version"
+    info "Default Node set to $version"
+}
 
 # Public: install tree-sitter CLI (small composed steps)
 install_tree_sitter() {
     require_cmds curl mktemp mv chmod uname || return 1
-    require_cmds npm node || install_node_npm
+    require_cmds nvm || { error "NVM Missing, please install!"; install_nvm; }
     ensure_build_dir || return 1
     local asset_sub jsonfile asset_url
     asset_sub="$(arch_asset_sub)" || { error "Unsupported architecture $(uname -m)"; return 1; }

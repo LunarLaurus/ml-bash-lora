@@ -16,11 +16,18 @@ while true; do
     echo "5) Show git status for a repo"
     echo "6) Delete local repo folder"
     echo "7) Open subshell in repo folder"
+    echo -e "\n${CYAN}=== Node/NPM ===${NC}"
+    echo "11) Install NVM"
+    echo "12) Install NodeJS via NVM"
+    echo "13) List NodeJS Versions via NVM"
+    echo "14) Use NodeJS Version for NVM"
+    echo "15) Set Default NodeJS Version for NVM"
+    echo "16) Remove NodeJS Version from NVM"
     echo -e "\n${CYAN}=== LoRA/RAG ===${NC}"
-    echo "11) Preflight check"
-    echo "12) Install tree-sitter CLI"
-    echo "13) Extract code dataset from repo"
-    echo "14) Fine-tune LoRA on a repo dataset"
+    echo "21) Preflight check"
+    echo "22) Install tree-sitter CLI"
+    echo "23) Extract code dataset from repo"
+    echo "24) Fine-tune LoRA on a repo dataset"
     echo -e "${BRED}0) Back to Main Menu${NC}"
     
     read -rp "Choice: " choice
@@ -32,10 +39,18 @@ while true; do
         5) repo_status ;;
         6) delete_repo ;;
         7) open_repo_shell ;;
-        11) preflight_checks ;;
-        12) install_tree_sitter ;;
-        13) extract_code_dataset ;;
-        14) train_repo_lora ;;
+        
+        11) install_nvm ;;
+        12) install_node ;;
+        13) list_node_versions ;;
+        14) use_node ;;
+        15) set_default_node ;;
+        16) remove_node ;;
+        
+        21) preflight_checks ;;
+        22) install_tree_sitter ;;
+        23) extract_code_dataset ;;
+        24) train_repo_lora ;;
         0) break ;;
         *) echo -e "${RED}Invalid option${NC}" ;;
     esac

@@ -3,6 +3,8 @@ source "$PROJECT_ROOT/helpers.sh"
 update_script_dir 2
 source "$SCRIPT_DIR/detect_cuda.sh"
 
+NVIDIA_REPO_URL="https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/"
+
 # ------------------------------
 # Ensure NVIDIA CUDA repo exists
 # ------------------------------
