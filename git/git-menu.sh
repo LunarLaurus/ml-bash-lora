@@ -33,7 +33,7 @@ while true; do
         6) delete_repo ;;
         7) open_repo_shell ;;
         11) preflight_checks ;;
-        12) download_tree_sitter_wrapper ;;
+        12) install_tree_sitter ;;
         13) extract_code_dataset ;;
         14) train_repo_lora ;;
         0) break ;;
