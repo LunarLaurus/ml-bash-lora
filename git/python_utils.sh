@@ -88,7 +88,8 @@ download_with_resume() {
         tries=$((tries + 1))
         info "Downloading tree-sitter (attempt $tries/$max) from: $url"
         # -f fail on HTTP errors, -L follow redirects, -C - resume
-        if curl -fL --retry 5 --retry-delay 2 -C - -o "$tmpfile" "$url"; then
+        if curl -fL --retry 5 --retry-delay 2 -C - -o "${tmpfile}.gz" "$url"; then
+            gzip -d -f "${tmpfile}.gz"   # decompress .gz
             mv -f "$tmpfile" "$TS_BIN"
             chmod +x "$TS_BIN"
             trap - EXIT
