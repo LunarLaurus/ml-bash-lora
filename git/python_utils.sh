@@ -133,54 +133,62 @@ install_nvm() {
 
 # Prompt user for Node version if not supplied
 prompt_node_version() {
-    local version="$1"
+    local __resultvar=$1
+    local version
+    read -r -p "Enter Node.js version (e.g., 18, 20, 20.6.0): " version
     if [ -z "$version" ]; then
-        read -r -p "Enter Node.js version (e.g., 18, 20, 20.6.0): " version
-        if [ -z "$version" ]; then
-            info "No version entered. Aborting."
-            return 1
-        fi
+        info "No version entered. Aborting."
+        return 1
     fi
-    echo "$version"
+    if [ -n "$__resultvar" ]; then
+        eval "$__resultvar='$version'"
+    else
+        echo "$version"
+    fi
+    return 0
 }
 
 # Install Node.js version
 install_node() {
-    local version
-    version=$(prompt_node_version) || return 1
     install_nvm
+    local version
+    prompt_node_version version || return 1
     nvm install "$version"
     nvm use "$version"
     info "Node $(node -v) and npm $(npm -v) are active"
 }
 
-# Switch Node.js version
+# Use a Node.js version (interactive)
 use_node() {
-    local version
-    version=$(prompt_node_version) || return 1
     install_nvm
-    nvm use "$version" || warn "Version $version not installed"
+    local version
+    prompt_node_version version || return 1
+    if ! nvm use "$version" 2>/dev/null; then
+        warn "Node version $version not installed. Install first."
+        return 1
+    fi
+    info "Switched to Node $(node -v) and npm $(npm -v)"
 }
 
-# Remove Node.js version
-remove_node() {
-    local version
-    version=$(prompt_node_version) || return 1
-    install_nvm
-    nvm uninstall "$version"
-    info "Removed Node version $version"
-}
-
-# Set default Node.js version
+# Set default Node.js version (interactive)
 set_default_node() {
-    local version
-    version=$(prompt_node_version) || return 1
     install_nvm
+    local version
+    prompt_node_version version || return 1
     nvm alias default "$version"
     info "Default Node set to $version"
 }
 
-# Show all installed Node versions
+# Remove a Node.js version (interactive)
+remove_node() {
+    install_nvm
+    local version
+    prompt_node_version version || return 1
+    nvm uninstall "$version"
+    info "Removed Node version $version"
+}
+
+# List installed Node.js versions
 list_node_versions() {
     install_nvm
     nvm ls
