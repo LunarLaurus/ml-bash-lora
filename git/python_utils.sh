@@ -12,11 +12,11 @@ MISSING_PY_DEPS=()
 : "${TS_ASM_REPO:=${SCRIPT_DIR}/third_party/tree-sitter-asm}"
 
 declare -A NUMPY_VERSIONS=(
-    ["3.10"]="1.26.4"
+    ["3.10"]="1.25.2"
     ["3.11"]="1.26.4"
 )
 declare -A SCIPY_VERSIONS=(
-    ["3.10"]="1.15.3"
+    ["3.10"]="1.11.3"
     ["3.11"]="1.15.3"
 )
 declare -A SKLEARN_VERSIONS=(
