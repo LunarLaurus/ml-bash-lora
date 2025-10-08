@@ -147,7 +147,7 @@ prompt_node_version() {
 # Install Node.js version
 install_node() {
     local version
-    version=$(prompt_node_version "$1") || return 1
+    version=$(prompt_node_version) || return 1
     install_nvm
     nvm install "$version"
     nvm use "$version"
@@ -157,7 +157,7 @@ install_node() {
 # Switch Node.js version
 use_node() {
     local version
-    version=$(prompt_node_version "$1") || return 1
+    version=$(prompt_node_version) || return 1
     install_nvm
     nvm use "$version" || warn "Version $version not installed"
 }
@@ -165,7 +165,7 @@ use_node() {
 # Remove Node.js version
 remove_node() {
     local version
-    version=$(prompt_node_version "$1") || return 1
+    version=$(prompt_node_version) || return 1
     install_nvm
     nvm uninstall "$version"
     info "Removed Node version $version"
@@ -174,12 +174,11 @@ remove_node() {
 # Set default Node.js version
 set_default_node() {
     local version
-    version=$(prompt_node_version "$1") || return 1
+    version=$(prompt_node_version) || return 1
     install_nvm
     nvm alias default "$version"
     info "Default Node set to $version"
 }
-
 
 # Show all installed Node versions
 list_node_versions() {
