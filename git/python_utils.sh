@@ -379,7 +379,7 @@ extract_code_dataset() {
     ensure_python_cmd || { echo -e "${RED}Python not found. Activate env first.${NC}"; return 1; }
     install_nvm
     
-    check_python_deps tree_sitter tqdm
+    check_python_deps tree_sitter tree-sitter-c tqdm
     if [ "${#MISSING_PY_DEPS[@]}" -gt 0 ]; then
         echo -e "${BRED}Missing Python dependencies: ${MISSING_PY_DEPS[*]}${NC}"
         auto_install_python_deps || {
@@ -394,7 +394,7 @@ extract_code_dataset() {
     
     local output_file="${FOLDER_PATH}_dataset.jsonl"
     info "Extracting code dataset from '$FOLDER_PATH' into '$output_file'..."
-    run_python_file "$SCRIPT_DIR/process-repo.py" "$FOLDER_PATH" --out "$output_file" --ts_so "$TS_SO" || {
+    run_python_file "$SCRIPT_DIR/process-repo.py" "$FOLDER_PATH" --out "$output_file" || {
         error "Extraction failed"
         return 1
     }
