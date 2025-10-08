@@ -377,6 +377,8 @@ extract_code_dataset() {
     fi
     resolve_selection_to_folder "$REPO_SEL" || return 1
     ensure_python_cmd || { echo -e "${RED}Python not found. Activate env first.${NC}"; return 1; }
+    install_nvm
+    
     check_python_deps tree_sitter tqdm
     if [ "${#MISSING_PY_DEPS[@]}" -gt 0 ]; then
         echo -e "${BRED}Missing Python dependencies: ${MISSING_PY_DEPS[*]}${NC}"
@@ -407,6 +409,7 @@ train_repo_lora() {
     fi
     resolve_selection_to_folder "$REPO_SEL" || return 1
     ensure_python_cmd || { echo -e "${RED}Python not found. Activate env first.${NC}"; return 1; }
+    install_nvm
     
     # compute FOLDER_PATH if index selected
     if [[ "$REPO_SEL" =~ ^[0-9]+$ ]]; then
