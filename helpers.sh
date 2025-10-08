@@ -32,6 +32,10 @@ NC='\033[0m'  # No Color
 ML_ENV_FILE="$HOME/.ml_current_env"
 
 
+error()  { printf '[ERROR] %s\n' "$*" >&2; }
+warn() { printf '[WARN] %s\n' "$*" >&2; }
+info() { printf '[INFO] %s\n' "$*"; }
+
 # ------------------------------
 # Get the directory of a sourced script relative to call depth
 # depth=0 → the current script
@@ -54,7 +58,7 @@ get_script_dir() {
 # ------------------------------
 update_script_dir() {
     local depth="${1:-0}"
-
+    
     SCRIPT_DIR="$(get_script_dir "$depth")"
     
     # Logging
