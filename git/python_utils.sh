@@ -5,6 +5,7 @@ BUILD_DIR="${SCRIPT_DIR}/build"
 TS_BIN="${BUILD_DIR}/tree-sitter"
 TS_SO="${BUILD_DIR}/my-languages.so"
 ACTIVE_NODE_VER=20
+MISSING_PY_DEPS=()
 
 # Configurable grammar repo locations (overrideable earlier if needed)
 : "${TS_C_REPO:=${SCRIPT_DIR}/third_party/tree-sitter-c}"
@@ -329,7 +330,7 @@ check_python_deps() {
 }
 
 auto_install_python_deps() {
-    if [ ${#MISSING_PY_DEPS[@]:-0} -eq 0 ]; then
+    if [ ${#MISSING_PY_DEPS[@]} -eq 0 ]; then
         return 0
     fi
     ensure_python_cmd || { echo -e "${RED}Python not found. Activate env first.${NC}"; return 1; }
@@ -433,7 +434,7 @@ train_repo_lora() {
     fi
     
     check_python_deps transformers datasets peft torch tqdm
-    if [ ${#MISSING_PY_DEPS[@]:-0} -gt 0 ]; then
+    if [ ${#MISSING_PY_DEPS[@]} -gt 0 ]; then
         echo -e "${BRED}Missing Python dependencies: ${MISSING_PY_DEPS[*]}${NC}"
         auto_install_python_deps || {
             echo -e "${BRED}Automatic installation failed. Please install manually:${NC} pip install ${MISSING_PY_DEPS[*]}"
