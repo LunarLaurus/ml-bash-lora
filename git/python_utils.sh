@@ -386,9 +386,8 @@ train_repo_lora() {
     return 0
 }
 
-# Optional convenience: preflight check function
 preflight_checks() {
-    require_cmds curl git gcc "$PYTHON_CMD" || return 1
+    require_cmds curl git gcc || return 1
     ensure_build_dir || return 1
     info "Preflight checks passed"
     return 0
