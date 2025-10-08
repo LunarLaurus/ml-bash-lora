@@ -253,6 +253,7 @@ auto_install_python_deps() {
     if [ ${#MISSING_PY_DEPS[@]:-0} -eq 0 ]; then
         return 0
     fi
+    ensure_python_cmd || { echo -e "${RED}Python not found. Activate env first.${NC}"; return 1; }
     if [ -z "${PIP_CMD[*]:-}" ]; then
         warn "No PIP_CMD configured; cannot auto-install python deps"
         return 1
@@ -290,32 +291,13 @@ prepare_tree_sitter_environment() {
     return 0
 }
 
-run_python_script() {
-    local script_path="$1"; shift
-    if [ ! -f "$script_path" ]; then
-        error "Python script not found: $script_path"
-        return 1
-    fi
-    "$PYTHON_CMD" "$script_path" "$@"
-    local rc=$?
-    if [ $rc -ne 0 ]; then
-        error "Python script '$script_path' failed (exit $rc)"
-    fi
-    return $rc
-}
-
 extract_code_dataset() {
     if ! prompt_repo_selection; then
         info "Cancelled"
         return 0
     fi
     resolve_selection_to_folder "$REPO_SEL" || return 1
-    
-    # ensure python cmd exists (fallbacks handled by default)
-    if ! command -v "$PYTHON_CMD" >/dev/null 2>&1; then
-        error "Python not found: $PYTHON_CMD"
-        return 1
-    fi
+    ensure_python_cmd || { echo -e "${RED}Python not found. Activate env first.${NC}"; return 1; }
     
     check_python_deps tree_sitter tqdm
     if [ ${#MISSING_PY_DEPS[@]:-0} -gt 0 ]; then
@@ -332,7 +314,7 @@ extract_code_dataset() {
     
     local output_file="${FOLDER_PATH}_dataset.jsonl"
     info "Extracting code dataset from '$FOLDER_PATH' into '$output_file'..."
-    run_python_script "$SCRIPT_DIR/process-repo.py" "$FOLDER_PATH" --out "$output_file" --ts_so "$TS_SO" || {
+    run_python_file "$SCRIPT_DIR/process-repo.py" "$FOLDER_PATH" --out "$output_file" --ts_so "$TS_SO" || {
         error "Extraction failed"
         return 1
     }
@@ -346,6 +328,7 @@ train_repo_lora() {
         return 0
     fi
     resolve_selection_to_folder "$REPO_SEL" || return 1
+    ensure_python_cmd || { echo -e "${RED}Python not found. Activate env first.${NC}"; return 1; }
     
     # compute FOLDER_PATH if index selected
     if [[ "$REPO_SEL" =~ ^[0-9]+$ ]]; then
@@ -379,7 +362,7 @@ train_repo_lora() {
     fi
     
     info "Starting LoRA fine-tuning for '$FOLDER_PATH'..."
-    run_python_script "$SCRIPT_DIR/lora_train_repo.py" "$dataset" --output_dir "$output" || {
+    run_python_file "$SCRIPT_DIR/lora_train_repo.py" "$dataset" --output_dir "$output" || {
         error "LoRA training failed"
         return 1
     }
