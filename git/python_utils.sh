@@ -428,8 +428,13 @@ train_repo_lora() {
         return 1
     fi
     
-    "${PIP_CMD[@]}" install --upgrade --force-reinstall numpy==1.26.4 scipy==1.11.3 scikit-learn==1.4.1
+    
+    
+    #"${PIP_CMD[@]}" install --upgrade --force-reinstall numpy==1.26.4 scipy==1.11.3 scikit-learn==1.4.1
     #\ transformers==4.57.0 peft==0.17.1 datasets==2.17.0 accelerate==1.10.1 bitsandbytes==0.41.0 safetensors==0.6.2 torch==2.8.0
+    
+    # Python 3.10 deps below?
+    "${PIP_CMD[@]}" install --upgrade --force-reinstall numpy==1.26.4 scipy==1.15.3 scikit-learn==1.7.2 transformers==4.36.2 peft==0.17.1
     
     
     check_python_deps transformers datasets peft torch tqdm numpy scipy scikit-learn
