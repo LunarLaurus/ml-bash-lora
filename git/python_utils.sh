@@ -131,58 +131,60 @@ install_nvm() {
     info "nvm installed. Run 'nvm --version' to check"
 }
 
-# Install a specific Node.js version via nvm
-install_node() {
+# Prompt user for Node version if not supplied
+prompt_node_version() {
     local version="$1"
     if [ -z "$version" ]; then
-        info "Usage: install_node <version>"
-        return 1
+        read -r -p "Enter Node.js version (e.g., 18, 20, 20.6.0): " version
+        if [ -z "$version" ]; then
+            info "No version entered. Aborting."
+            return 1
+        fi
     fi
+    echo "$version"
+}
+
+# Install Node.js version
+install_node() {
+    local version
+    version=$(prompt_node_version "$1") || return 1
     install_nvm
     nvm install "$version"
     nvm use "$version"
     info "Node $(node -v) and npm $(npm -v) are active"
 }
 
-# Switch to a specific Node.js version
+# Switch Node.js version
 use_node() {
-    local version="$1"
-    if [ -z "$version" ]; then
-        info "Usage: use_node <version>"
-        return 1
-    fi
+    local version
+    version=$(prompt_node_version "$1") || return 1
     install_nvm
     nvm use "$version" || warn "Version $version not installed"
 }
 
-# Remove a specific Node.js version
+# Remove Node.js version
 remove_node() {
-    local version="$1"
-    if [ -z "$version" ]; then
-        info "Usage: remove_node <version>"
-        return 1
-    fi
+    local version
+    version=$(prompt_node_version "$1") || return 1
     install_nvm
     nvm uninstall "$version"
     info "Removed Node version $version"
 }
 
+# Set default Node.js version
+set_default_node() {
+    local version
+    version=$(prompt_node_version "$1") || return 1
+    install_nvm
+    nvm alias default "$version"
+    info "Default Node set to $version"
+}
+
+
 # Show all installed Node versions
 list_node_versions() {
     install_nvm
     nvm ls
-}
-
-# Set a default Node.js version
-set_default_node() {
-    local version="$1"
-    if [ -z "$version" ]; then
-        info "Usage: set_default_node <version>"
-        return 1
-    fi
-    install_nvm
-    nvm alias default "$version"
-    info "Default Node set to $version"
 }
 
 # Public: install tree-sitter CLI (small composed steps)
