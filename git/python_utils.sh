@@ -144,6 +144,7 @@ prompt_node_version() {
 
 # Install Node.js version
 install_node() {
+    install_nvm
     prompt_node_version || return 1
     nvm install "$ACTIVE_NODE_VER"
     nvm use "$ACTIVE_NODE_VER"
@@ -152,6 +153,7 @@ install_node() {
 
 # Use a Node.js version (interactive)
 use_node() {
+    install_nvm
     prompt_node_version || return 1
     if ! nvm use "$ACTIVE_NODE_VER" 2>/dev/null; then
         warn "Node version $ACTIVE_NODE_VER not installed. Install first."
@@ -162,6 +164,7 @@ use_node() {
 
 # Set default Node.js version (interactive)
 set_default_node() {
+    install_nvm
     prompt_node_version || return 1
     nvm alias default "$ACTIVE_NODE_VER"
     info "Default Node set to $ACTIVE_NODE_VER"
@@ -169,6 +172,7 @@ set_default_node() {
 
 # Remove a Node.js version (interactive)
 remove_node() {
+    install_nvm
     prompt_node_version || return 1
     nvm uninstall "$ACTIVE_NODE_VER"
     info "Removed Node version $ACTIVE_NODE_VER"
@@ -176,6 +180,7 @@ remove_node() {
 
 # List installed Node.js versions
 list_node_versions() {
+    install_nvm
     nvm ls
 }
 
