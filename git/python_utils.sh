@@ -480,8 +480,9 @@ train_repo_lora() {
     numpy=="$NUMPY_VER" \
     scipy=="$SCIPY_VER" \
     scikit-learn=="$SKLEARN_VER" \
-    transformers=="$TRANSFORMERS_VER" \
-    peft=="$PEFT_VER"
+    transformers=="$TRANSFORMERS_VER"
+    
+    "${PIP_CMD[@]}" install --upgrade --force-reinstall accelerate bitsandbytes peft
     
 "$PYTHON_CMD" - <<PY
 import importlib
@@ -507,7 +508,6 @@ for pkg in packages:
 PY
     
     
-    "${PIP_CMD[@]}" install --upgrade --force-reinstall accelerate
     
     info "Checking dependencies..."
     check_python_deps transformers datasets peft torch tqdm numpy scipy scikit-learn
