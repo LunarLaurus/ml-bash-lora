@@ -42,6 +42,12 @@ RECOMMENDED_MODELS = [
     "Novora/CodeClassifier-v1-Tiny",
 ]
 
+LEARN_RATE_SUGGESTED = {
+    "small": ["1e-4", "5e-5", "2e-4"],
+    "medium": ["2e-4", "3e-4", "5e-4"],
+    "large": ["5e-4", "1e-3"],
+}
+
 HF_TOKEN_FILE = Path.home() / ".huggingface/token"
 
 
@@ -238,7 +244,35 @@ def configure_training_args(interactive=True):
     logging.info(
         "Learning rate: Step size for optimizer updates. Too high can destabilize training, too low slows convergence. Default=1e-4"
     )
-    learning_rate = input("Learning rate (default 1e-4): ").strip()
+
+    # Prompt user for model size
+    logging.info("Enter model size:\n   small >= 3B\n   medium ~= 7B\n   large >= 13B")
+    model_size = input("Size (default medium): ").strip()
+
+    # Suggest learning rates
+    suggested_lrs = LEARN_RATE_SUGGESTED.get(model_size, ["2e-4"])  # fallback default
+    logging.info(
+        "Typical learning rate choices depending on model size and fine-tuning strategy:"
+    )
+
+    logging.info("\nLoRA fine-tuning small model (1–3B): 1e-4, 5e-5, 2e-4")
+    logging.info("LoRA fine-tuning medium model (7B): 2e-4, 3e-4, 5e-4")
+    logging.info("LoRA fine-tuning large model (13B+): 5e-4, 1e-3 (rarely higher)")
+    logging.info("\nFull model fine-tuning small: 1e-5 – 5e-5")
+    logging.info("Full model fine-tuning large: 1e-5 – 2e-5")
+    logging.info("\nExtremely stable training / long sequences: 5e-5 or lower")
+    logging.info("Aggressive quick adaptation: 3e-4 – 5e-4")
+
+    logging.info(
+        f"\nRecommended learning rates for model size {model_size}: {', '.join(suggested_lrs)}"
+    )
+    logging.info(
+        "Lower LR = safer, slower training; higher LR = faster, more aggressive adaptation."
+    )
+
+    # Ask user to pick one or type custom
+    learning_rate = input(f"Enter learning rate [default {suggested_lrs[0]}]: ").strip()
+    learning_rate = float(learning_rate) if learning_rate else float(suggested_lrs[0])
 
     args = {}
     if batch_size:
