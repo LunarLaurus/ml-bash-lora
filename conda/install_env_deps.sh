@@ -229,7 +229,7 @@ list_lora_lib_versions() {
 import importlib
 pkgs = [
     "numpy", "torch", "torchvision", "torchaudio", "scipy", "sklearn",
-    "tiktoken", "protobuf", "transformers", "peft", "bitsandbytes",
+    "tiktoken", "google.protobuf", "transformers", "peft", "bitsandbytes",
     "accelerate", "datasets", "safetensors"
 ]
 

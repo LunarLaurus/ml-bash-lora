@@ -435,7 +435,7 @@ train_repo_lora() {
         "$PYTHON_CMD" -c "import torch; import transformers; import peft; import sklearn; import scipy; print('Python Deps: OK')"
     else
         warn "Some packages are missing."
-        check_python_deps numpy torch torchvision torchaudio transformers datasets peft torch tqdm numpy scipy sklearn tiktoken protobuf bitsandbytes accelerate safetensors
+        check_python_deps numpy torch torchvision torchaudio transformers datasets peft torch tqdm numpy scipy sklearn tiktoken google.protobuf bitsandbytes accelerate safetensors
         if [ ${#MISSING_PY_DEPS[@]} -gt 0 ]; then
             warn "${BRED}Missing Python dependencies: ${MISSING_PY_DEPS[*]}${NC}"
             auto_install_python_deps || {
