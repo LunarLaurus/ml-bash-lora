@@ -220,7 +220,7 @@ def configure_training_args(interactive=True):
     if not interactive:
         return None
 
-    print("\nTraining hyperparameters (press Enter to skip any)")
+    logging.info("Training hyperparameters (press Enter to skip any)")
     logging.info(
         "Batch size per device: Number of samples processed simultaneously on each GPU. Default=1"
     )
@@ -255,16 +255,16 @@ def configure_training_args(interactive=True):
         "Typical learning rate choices depending on model size and fine-tuning strategy:"
     )
 
-    logging.info("\nLoRA fine-tuning small model (1–3B): 1e-4, 5e-5, 2e-4")
+    logging.info("LoRA fine-tuning small model (1–3B): 1e-4, 5e-5, 2e-4")
     logging.info("LoRA fine-tuning medium model (7B): 2e-4, 3e-4, 5e-4")
     logging.info("LoRA fine-tuning large model (13B+): 5e-4, 1e-3 (rarely higher)")
-    logging.info("\nFull model fine-tuning small: 1e-5 – 5e-5")
+    logging.info("Full model fine-tuning small: 1e-5 – 5e-5")
     logging.info("Full model fine-tuning large: 1e-5 – 2e-5")
-    logging.info("\nExtremely stable training / long sequences: 5e-5 or lower")
+    logging.info("Extremely stable training / long sequences: 5e-5 or lower")
     logging.info("Aggressive quick adaptation: 3e-4 – 5e-4")
 
     logging.info(
-        f"\nRecommended learning rates for model size {model_size}: {', '.join(suggested_lrs)}"
+        f"Recommended learning rates for model size {model_size}: {', '.join(suggested_lrs)}"
     )
     logging.info(
         "Lower LR = safer, slower training; higher LR = faster, more aggressive adaptation."
@@ -297,7 +297,7 @@ def configure_lora_args(interactive=True):
     if not interactive:
         return None
 
-    print("\nLoRA hyperparameters (press Enter to skip any)")
+    logging.info("LoRA hyperparameters (press Enter to skip any)")
     logging.info(
         "LoRA rank r: Dimensionality of the low-rank decomposition for LoRA. Higher r = more capacity, more memory. Default=16"
     )
@@ -320,6 +320,24 @@ def configure_lora_args(interactive=True):
         "Target modules (comma-separated, default 'q_proj,v_proj'): "
     ).strip()
 
+    logging.info(
+        "Bias: Bias type for LoRA. Can be none, all or lora_only.\nIf all or lora_only, the corresponding biases will be updated during training. \nBe aware that this means that, even when disabling the adapters, the model will not produce the same output as the base model would have without adaptation."
+    )
+    bias = input("Bias (default none): ").strip()
+
+    logging.info("Overview of types of tasks supported by PEFT: ")
+    logging.info(
+        "   SEQ_CLS: Text classification. \n\
+            SEQ_2_SEQ_LM: Sequence-to-sequence language modeling. \n\
+            CAUSAL_LM: Causal language modeling. "
+    )
+    logging.info(
+        "   TOKEN_CLS: Token classification. \n\
+            QUESTION_ANS: Question answering. \n\
+            FEATURE_EXTRACTION: Feature extraction. Provides the hidden states which can be used as embeddings or features for downstream tasks. "
+    )
+    task_type = input("Task Type (default SEQ_2_SEQ_LM): ").strip()
+
     args = {}
     if r:
         args["r"] = int(r)
@@ -329,9 +347,10 @@ def configure_lora_args(interactive=True):
         args["lora_dropout"] = float(dropout)
     if target_modules:
         args["target_modules"] = [m.strip() for m in target_modules.split(",")]
-
-    if args:
-        args.setdefault("task_type", "CAUSAL_LM")
+    if bias:
+        args["bias"] = bias
+    if task_type:
+        args["task_type"] = task_type
 
     return args or None
 
@@ -344,7 +363,7 @@ def configure_checkpoint_args(interactive=True):
     if not interactive:
         return None
 
-    print("\nCheckpointing options (press Enter to skip any)")
+    logging.info("Checkpointing options (press Enter to skip any)")
     logging.info(
         "Save strategy: How often to save model checkpoints. 'epoch' = save after each epoch, 'steps' = save every N steps. Default='epoch'"
     )
