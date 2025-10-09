@@ -123,18 +123,13 @@ remove_user_packages() {
     read -rp "Enter package names to remove (space-separated): " -a user_pkgs
     
     if [[ ${#user_pkgs[@]} -eq 0 ]]; then
-        echo "[INFO] No packages entered. Nothing to do."
+        info "No packages entered. Nothing to do."
         return 0
     fi
     
     for pkg in "${user_pkgs[@]}"; do
-        # Check if package is installed
-        if "$PYTHON_CMD" -c "import importlib; import sys; sys.exit(0 if importlib.util.find_spec('$pkg') else 1)"; then
-            echo "[INFO] Removing $pkg ..."
-            "${PIP_CMD[@]}" uninstall -y "$pkg" || echo "[WARN] Failed to uninstall $pkg"
-        else
-            echo "[INFO] $pkg not installed, skipping."
-        fi
+        info "Removing $pkg ..."
+        "${PIP_CMD[@]}" uninstall -y "$pkg" || warn "Failed to uninstall $pkg"
     done
 }
 
