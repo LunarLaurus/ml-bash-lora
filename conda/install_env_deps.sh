@@ -227,7 +227,7 @@ list_lora_lib_versions() {
     
     "$PYTHON_CMD" - <<PY
 import importlib
-pkgs = ["transformers","peft","bitsandbytes","accelerate","datasets","safetensors"]
+pkgs = ["numpy", "torch", "torchvision", "torchaudio", "scipy", "sklearn", "tiktoken", "protobuf","transformers","peft","bitsandbytes","accelerate","datasets","safetensors"]
 for p in pkgs:
     try:
         m = importlib.import_module(p)

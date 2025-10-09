@@ -428,34 +428,9 @@ train_repo_lora() {
         error "Dataset file '$dataset' not found. Run extraction first."
         return 1
     fi
-    
-"$PYTHON_CMD" - <<PY
-import importlib
-
-packages = [
-    "numpy",
-    "scipy",
-    "sklearn",
-    "transformers",
-    "peft",
-    "torch",
-    "torchvision",
-    "torchaudio"
-]
-
-print("Installed package versions:")
-for pkg in packages:
-    try:
-        module = importlib.import_module(pkg)
-        print(f"{pkg}: {module.__version__}")
-    except ModuleNotFoundError:
-        print(f"{pkg}: NOT INSTALLED")
-PY
-    
-    
-    
+    list_lora_lib_versions
     info "Checking dependencies..."
-    check_python_deps transformers datasets peft torch tqdm numpy scipy sklearn
+    check_python_deps numpy torch torchvision torchaudio transformers datasets peft torch tqdm numpy scipy sklearn tiktoken protobuf bitsandbytes accelerate safetensors
     if [ ${#MISSING_PY_DEPS[@]} -gt 0 ]; then
         echo -e "${BRED}Missing Python dependencies: ${MISSING_PY_DEPS[*]}${NC}"
         auto_install_python_deps || {

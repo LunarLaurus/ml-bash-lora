@@ -10,3 +10,5 @@ peft>=0.17.1
 accelerate
 datasets
 safetensors
+tiktoken
+protobuf
