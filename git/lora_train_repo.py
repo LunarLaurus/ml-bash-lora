@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
 """
 Fine-tune a 7B-8B code model using LoRA on a JSONL dataset extracted from a repo.
-Supports interactive model selection and per-model output directories.
+Supports interactive model selection, per-model output directories, and automatic Hugging Face login.
 """
-
 import argparse
 import logging
 import os
-from datasets import load_dataset
+import subprocess
+from pathlib import Path
+
+import torch
+from tqdm.auto import tqdm
+
+from datasets import load_dataset, Dataset
 from transformers import (
     AutoTokenizer,
     AutoModelForCausalLM,
@@ -18,16 +23,12 @@ from transformers import (
     TrainerControl,
 )
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
-import torch
-from tqdm.auto import tqdm
-
-print(f"[LoRA] torch={torch.__version__}, CUDA available={torch.cuda.is_available()}")
 import peft
 
+print(f"[LoRA] torch={torch.__version__}, CUDA available={torch.cuda.is_available()}")
 print(f"[LoRA] peft={peft.__version__}")
 
-
-# Recommended models (add more as you like)
+# Recommended models (can expand)
 RECOMMENDED_MODELS = [
     "meta-llama/CodeLlama-7b-hf",
     "glaiveai/glaive-coder-7b",
@@ -36,6 +37,8 @@ RECOMMENDED_MODELS = [
     "google/codegemma-7b",
     "aixcoder-7b",
 ]
+
+HF_TOKEN_FILE = Path.home() / ".huggingface/token"
 
 
 def setup_logger():
@@ -46,22 +49,69 @@ def setup_logger():
     )
 
 
-class GPUUsageCallback(TrainerCallback):
-    """Logs GPU memory usage during training steps."""
+def get_hf_token():
+    """
+    Returns Hugging Face token to use for model downloads.
+    Priority:
+      1) Huggingface CLI login token (if available)
+      2) Local token file (~/.huggingface/token)
+      3) Prompt user for token and save it
+    """
+    # 1️⃣ Try CLI login
+    try:
+        result = subprocess.run(
+            ["huggingface-cli", "whoami"], capture_output=True, text=True, check=True
+        )
+        logging.info(f"Hugging Face CLI authenticated as: {result.stdout.strip()}")
+        return None  # CLI manages token automatically
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        logging.info(
+            "HF CLI not found or not logged in, falling back to token file/prompt"
+        )
 
-    def on_step_end(
-        self,
-        args: TrainingArguments,
-        state: TrainerState,
-        control: TrainerControl,
-        **kwargs,
-    ):
+    # 2️⃣ Try token file
+    if HF_TOKEN_FILE.exists():
+        token = HF_TOKEN_FILE.read_text().strip()
+        if token:
+            logging.info(f"Using Hugging Face token from {HF_TOKEN_FILE}")
+            return token
+
+    # 3️⃣ Prompt user
+    token = input(
+        "Enter your Hugging Face access token (gated/private models): "
+    ).strip()
+    HF_TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
+    HF_TOKEN_FILE.write_text(token)
+    logging.info(f"Token saved to {HF_TOKEN_FILE}")
+    return token
+
+
+class GPUUsageCallback(TrainerCallback):
+    """Displays GPU usage alongside a live progress bar."""
+
+    def __init__(self):
+        super().__init__()
+        self.pbar = None
+
+    def on_train_begin(self, args, state, control, **kwargs):
+        # Initialize tqdm for training steps
+        self.pbar = tqdm(total=state.max_steps, desc="Training", unit="step")
+
+    def on_step_end(self, args, state, control, **kwargs):
+        self.pbar.update(1)
         if torch.cuda.is_available():
             allocated = torch.cuda.memory_allocated() / 1024**2
             reserved = torch.cuda.memory_reserved() / 1024**2
-            logging.info(
-                f"[GPU] Step {state.global_step} - Memory Allocated: {allocated:.1f} MB, Reserved: {reserved:.1f} MB"
+            self.pbar.set_postfix(
+                {
+                    "GPU Alloc(MB)": f"{allocated:.0f}",
+                    "GPU Reserved(MB)": f"{reserved:.0f}",
+                }
             )
+
+    def on_train_end(self, args, state, control, **kwargs):
+        if self.pbar is not None:
+            self.pbar.close()
 
 
 def select_model(interactive=True, default_model=None):
@@ -88,8 +138,33 @@ def select_model(interactive=True, default_model=None):
         print("Invalid choice, try again.")
 
 
+def get_tokenized_dataset(dataset, tokenizer, output_dir, max_length, num_proc):
+    cache_file = Path(output_dir) / "tokenized_dataset.arrow"
+
+    if cache_file.exists():
+        logging.info(f"Loading tokenized dataset from cache: {cache_file}")
+        from datasets import load_from_disk
+
+        tokenized_dataset = load_from_disk(cache_file)
+    else:
+        logging.info("Tokenizing dataset...")
+
+        def tokenize(examples):
+            return tokenizer(examples["text"], truncation=True, max_length=max_length)
+
+        tokenized_dataset = dataset.map(
+            tokenize, batched=True, num_proc=num_proc, desc="Tokenizing", disable=False
+        )
+        tokenized_dataset.set_format(type="torch", columns=["input_ids"])
+        tokenized_dataset.save_to_disk(cache_file)
+        logging.info(f"Tokenized dataset cached at: {cache_file}")
+
+    return tokenized_dataset
+
+
 def main():
     setup_logger()
+    hf_token = get_hf_token()
 
     parser = argparse.ArgumentParser(
         description="LoRA fine-tuning on code JSONL dataset"
@@ -147,9 +222,9 @@ def main():
         return
 
     logging.info(f"Loading tokenizer and base model ({base_model})...")
-    tokenizer = AutoTokenizer.from_pretrained(base_model)
+    tokenizer = AutoTokenizer.from_pretrained(base_model, use_auth_token=hf_token)
     model = AutoModelForCausalLM.from_pretrained(
-        base_model, device_map="auto", load_in_8bit=True
+        base_model, device_map="auto", load_in_8bit=True, use_auth_token=hf_token
     )
     model = prepare_model_for_kbit_training(model)
 
@@ -175,9 +250,12 @@ def main():
     def tokenize(examples):
         return tokenizer(examples["text"], truncation=True, max_length=args.max_length)
 
-    # Show tqdm progress bar for mapping
-    tokenized_dataset = dataset.map(
-        tokenize, batched=True, num_proc=args.num_proc, desc="Tokenizing", disable=False
+    tokenized_dataset = get_tokenized_dataset(
+        dataset,
+        tokenizer,
+        output_dir,
+        max_length=args.max_length,
+        num_proc=args.num_proc,
     )
     tokenized_dataset.set_format(type="torch", columns=["input_ids"])
 
