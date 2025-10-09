@@ -373,14 +373,16 @@ def prepare_tokenizer_and_model(base_model, hf_token, bnb_config=None):
     return tokenizer, model
 
 
-def configure_lora_model(model, r=16, alpha=32, dropout=0.1, target_modules=None):
+def configure_lora_model(
+    model, r=16, lora_alpha=32, lora_dropout=0.1, target_modules=None
+):
     target_modules = target_modules or ["q_proj", "v_proj"]
     logging.info("Configuring LoRA...")
     lora_config = LoraConfig(
         r=r,
-        lora_alpha=alpha,
+        lora_alpha=lora_alpha,
         target_modules=target_modules,
-        lora_dropout=dropout,
+        lora_dropout=lora_dropout,
         bias="none",
         task_type="CAUSAL_LM",
     )
@@ -520,7 +522,7 @@ def main():
         train_dataset=tokenized_dataset,
         tokenizer=tokenizer,
         args=training_args,
-        callbacks=[GPUUsageCallback],
+        callbacks=[GPUUsageCallback()],
     )
 
     logging.info("Starting LoRA fine-tuning...")
