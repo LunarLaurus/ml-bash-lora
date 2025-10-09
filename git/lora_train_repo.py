@@ -217,32 +217,47 @@ def configure_training_args(interactive=True):
     """
     Returns a dictionary of training args or None if skipped.
     """
+    defaults = {
+        "per_device_train_batch_size": 1,
+        "gradient_accumulation_steps": 4,
+        "max_length": 1024,
+        "num_train_epochs": 3,
+        "learning_rate": "2e-4",
+    }
     if not interactive:
-        return None
+        return defaults.copy()
 
     logging.info("Training hyperparameters (press Enter to skip any)")
     logging.info(
-        "Batch size per device: Number of samples processed simultaneously on each GPU. Default=1"
+        "Batch size per device: Number of samples processed simultaneously on each GPU."
     )
-    batch_size = input("Batch size per device (default 1): ").strip()
+    per_device_train_batch_size = input(
+        f"Batch size per device (default {defaults['per_device_train_batch_size']}): "
+    ).strip()
 
     logging.info(
-        "Gradient accumulation steps: Number of steps to accumulate gradients before updating weights. Useful for simulating larger batch sizes. Default=4"
+        "Gradient accumulation steps: Number of steps to accumulate gradients before updating weights. Useful for simulating larger batch sizes."
     )
-    grad_accum = input("Gradient accumulation steps (default 4): ").strip()
+    gradient_accumulation_steps = input(
+        f"Gradient accumulation steps (default {defaults['gradient_accumulation_steps']}): "
+    ).strip()
 
     logging.info(
-        "Max sequence length (tokens): Maximum number of tokens per training sample. Longer sequences use more memory. Default=1024"
+        "Max sequence length (tokens): Maximum number of tokens per training sample. Longer sequences use more memory."
     )
-    max_length = input("Max sequence length in tokens (default 1024): ").strip()
+    max_length = input(
+        f"Max sequence length in tokens (default {defaults['max_length']}): "
+    ).strip()
 
     logging.info(
-        "Number of training epochs: How many times the model will iterate over the entire dataset. Default=3"
+        "Number of training epochs: How many times the model will iterate over the entire dataset."
     )
-    epochs = input("Number of training epochs (default 3): ").strip()
+    num_train_epochs = input(
+        f"Number of training epochs (default {defaults['num_train_epochs']}): "
+    ).strip()
 
     logging.info(
-        "Learning rate: Step size for optimizer updates. Too high can destabilize training, too low slows convergence. Default=1e-4"
+        "Learning rate: Step size for optimizer updates. Too high can destabilize training, too low slows convergence."
     )
 
     # Prompt user for model size
@@ -271,22 +286,32 @@ def configure_training_args(interactive=True):
     )
 
     # Ask user to pick one or type custom
-    learning_rate = input(f"Enter learning rate [default {suggested_lrs[0]}]: ").strip()
+    learning_rate = input(
+        f"Enter learning rate (default {defaults['learning_rate']} / suggested {suggested_lrs[0]}): "
+    ).strip()
     learning_rate = float(learning_rate) if learning_rate else float(suggested_lrs[0])
 
-    args = {}
-    if batch_size:
-        args["per_device_train_batch_size"] = int(batch_size)
-    if grad_accum:
-        args["gradient_accumulation_steps"] = int(grad_accum)
-    if max_length:
-        args["max_length"] = int(max_length)
-    if epochs:
-        args["num_train_epochs"] = int(epochs)
-    if learning_rate:
-        args["learning_rate"] = float(learning_rate)
+    args = {
+        "per_device_train_batch_size": (
+            int(per_device_train_batch_size)
+            if per_device_train_batch_size
+            else defaults["per_device_train_batch_size"]
+        ),
+        "gradient_accumulation_steps": (
+            int(gradient_accumulation_steps)
+            if gradient_accumulation_steps
+            else defaults["gradient_accumulation_steps"]
+        ),
+        "max_length": int(max_length) if max_length else defaults["max_length"],
+        "num_train_epochs": (
+            int(num_train_epochs) if num_train_epochs else defaults["num_train_epochs"]
+        ),
+        "learning_rate": (
+            float(learning_rate) if learning_rate else defaults["learning_rate"]
+        ),
+    }
 
-    return args or None
+    return args
 
 
 # LoRA hyperparameters
@@ -294,36 +319,44 @@ def configure_lora_args(interactive=True):
     """
     Returns a dictionary of LoRA args or None if skipped.
     """
+    defaults = {
+        "r": 16,
+        "lora_alpha": 32,
+        "lora_dropout": 0.1,
+        "target_modules": ["q_proj", "v_proj"],
+        "bias": "none",
+        "task_type": "SEQ_2_SEQ_LM",
+    }
     if not interactive:
-        return None
+        return defaults.copy()
 
     logging.info("LoRA hyperparameters (press Enter to skip any)")
     logging.info(
-        "LoRA rank r: Dimensionality of the low-rank decomposition for LoRA. Higher r = more capacity, more memory. Default=16"
+        "LoRA rank r: Dimensionality of the low-rank decomposition for LoRA. Higher r = more capacity, more memory."
     )
-    r = input("LoRA rank r (default 16): ").strip()
+    r = input(f"LoRA rank r (default {defaults['r']}): ").strip()
 
     logging.info(
-        "LoRA alpha: Scaling factor for LoRA updates. Higher alpha increases adaptation strength. Default=32"
+        "LoRA alpha: Scaling factor for LoRA updates. Higher alpha increases adaptation strength."
     )
-    alpha = input("LoRA alpha (default 32): ").strip()
+    alpha = input(f"LoRA alpha (default {defaults['lora_alpha']}): ").strip()
 
     logging.info(
-        "LoRA dropout: Dropout probability applied to LoRA layers. Helps regularize training. Default=0.1"
+        "LoRA dropout: Dropout probability applied to LoRA layers. Helps regularize training."
     )
-    dropout = input("LoRA dropout (default 0.1): ").strip()
+    dropout = input(f"LoRA dropout (default {defaults['lora_dropout']}): ").strip()
 
     logging.info(
-        "Target modules: Comma-separated list of model modules to apply LoRA to (e.g., 'q_proj,v_proj'). Default='q_proj,v_proj'"
+        "Target modules: Comma-separated list of model modules to apply LoRA to (e.g., 'q_proj,v_proj')."
     )
     target_modules = input(
-        "Target modules (comma-separated, default 'q_proj,v_proj'): "
+        f"Target modules (comma-separated, default {','.join(defaults['target_modules'])}): "
     ).strip()
 
     logging.info(
         "Bias: Bias type for LoRA. Can be none, all or lora_only.\nIf all or lora_only, the corresponding biases will be updated during training. \nBe aware that this means that, even when disabling the adapters, the model will not produce the same output as the base model would have without adaptation."
     )
-    bias = input("Bias (default none): ").strip()
+    bias = input(f"Bias (default {defaults['bias']}): ").strip()
 
     logging.info("Overview of types of tasks supported by PEFT: ")
     logging.info(
@@ -336,23 +369,23 @@ def configure_lora_args(interactive=True):
             QUESTION_ANS: Question answering. \n\
             FEATURE_EXTRACTION: Feature extraction. Provides the hidden states which can be used as embeddings or features for downstream tasks. "
     )
-    task_type = input("Task Type (default SEQ_2_SEQ_LM): ").strip()
+    task_type = input(f"Task Type (default {defaults['task_type']}): ").strip()
 
-    args = {}
-    if r:
-        args["r"] = int(r)
-    if alpha:
-        args["lora_alpha"] = int(alpha)
-    if dropout:
-        args["lora_dropout"] = float(dropout)
-    if target_modules:
-        args["target_modules"] = [m.strip() for m in target_modules.split(",")]
-    if bias:
-        args["bias"] = bias
-    if task_type:
-        args["task_type"] = task_type
+    # Apply inputs or fallback to defaults
+    args = {
+        "r": int(r) if r else defaults["r"],
+        "lora_alpha": int(alpha) if alpha else defaults["lora_alpha"],
+        "lora_dropout": float(dropout) if dropout else defaults["lora_dropout"],
+        "target_modules": (
+            [m.strip() for m in target_modules.split(",")]
+            if target_modules
+            else defaults["target_modules"]
+        ),
+        "bias": bias if bias else defaults["bias"],
+        "task_type": task_type if task_type else defaults["task_type"],
+    }
 
-    return args or None
+    return args
 
 
 # Checkpoint / saving options
@@ -360,29 +393,38 @@ def configure_checkpoint_args(interactive=True):
     """
     Returns a dictionary of checkpoint args or None if skipped.
     """
+    defaults = {"save_strategy": "best", "save_total_limit": 5}
     if not interactive:
-        return None
+        return defaults.copy()
 
     logging.info("Checkpointing options (press Enter to skip any)")
     logging.info(
-        "Save strategy: How often to save model checkpoints. 'epoch' = save after each epoch, 'steps' = save every N steps. Default='epoch'"
+        "The checkpoint save strategy to adopt during training. Possible values are:"
     )
-    save_strategy = input(
-        "Save strategy ('epoch' or 'steps', default 'epoch'): "
-    ).strip()
+    logging.info(
+        f"   no: No save is done during training. \n\
+            epoch: Save is done at the end of each epoch. \n\
+            steps: Save is done every save_steps. \n\
+            best: Save is done whenever a new best_metric is achieved. \n\
+            (default {defaults['save_strategy']})"
+    )
+    save_strategy = input(f"Save strategy (default {defaults['bias']}): ").strip()
 
     logging.info(
-        "Number of checkpoints to keep: Limits how many past checkpoints are retained to save disk space. Default=2"
+        "Number of checkpoints to keep: Limits how many past checkpoints are retained to save disk space."
     )
-    save_total_limit = input("Number of checkpoints to keep (default 2): ").strip()
+    save_total_limit = input(
+        f"Number of checkpoints to keep (default {defaults['save_total_limit']}): "
+    ).strip()
 
-    args = {}
-    if save_strategy:
-        args["save_strategy"] = save_strategy
-    if save_total_limit:
-        args["save_total_limit"] = int(save_total_limit)
+    args = {
+        "save_strategy": save_strategy if save_strategy else defaults["save_strategy"],
+        "save_total_limit": (
+            save_total_limit if save_total_limit else defaults["save_total_limit"]
+        ),
+    }
 
-    return args or None
+    return args
 
 
 def configure_lora(interactive=True):
