@@ -140,10 +140,26 @@ install_lora_deps() {
     expected_torch_ver="$(get_expected_torch_ver "$cuidx")"
     expected_label="${expected_torch_ver:-cpu}"
     
-    if [[ "${normalized_reported:-}" = "${expected_torch_ver}" ]]; then
-        info "${GREEN}Success: Installed PyTorch matches expected (${expected_label}) for CUDA index ${cuidx:-cu0}.${NC}"
+    local installed_torch_ver
+    installed_torch_ver="$(python -c 'import torch; print(torch.__version__.split("+")[0])')"
+    
+    if [[ "${installed_torch_ver%%.*}" = "${expected_torch_ver%%.*}" ]]; then
+        info "${GREEN}Success: Installed PyTorch ${installed_torch_ver} matches expected ${expected_torch_ver}.${NC}"
     else
-        warn "${RED}Mismatch: PyTorch reports '${normalized_reported:-cpu}', expected '${expected_label}' for CUDA index ${cuidx:-cu0}.${NC}"
+        warn "${RED}Mismatch: Installed PyTorch ${installed_torch_ver}, expected ${expected_torch_ver}.${NC}"
+    fi
+    
+    local reported_cuda_ver
+    reported_cuda_ver="$(python -c 'import torch; print(torch.version.cuda or "cpu")')"
+    
+    local expected_cuda="${CUDA_VER:-}"
+    
+    if [[ "$reported_cuda_ver" == "cpu" && "$expected_cuda" == "cpu" ]]; then
+        info "${GREEN}Success: CPU-only PyTorch installation.${NC}"
+        elif [[ "${reported_cuda_ver/./}" == "${expected_cuda/./}" ]]; then
+        info "${GREEN}Success: PyTorch CUDA runtime ($reported_cuda_ver) matches expected ($expected_cuda).${NC}"
+    else
+        warn "${RED}Mismatch: PyTorch built with CUDA $reported_cuda_ver, expected $expected_cuda for $cuidx.${NC}"
     fi
     
     info "${BBLUE}[install] Dependency installation complete.${NC}"
