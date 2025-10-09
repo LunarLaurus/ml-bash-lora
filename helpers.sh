@@ -45,8 +45,8 @@ log() {
 
 # Wrappers
 info()  { log "" "[INFO] $*"; }       # No default color
-warn()  { log "$YELLOW" "[WARN] $*"; }
-error() { log "$RED" "[ERROR] $*"; }
+warn()  { log "$BYELLOW" "[WARN] $*"; }
+error() { log "$BRED" "[ERROR] $*"; }
 
 # ------------------------------
 # Get the directory of a sourced script relative to call depth
@@ -74,21 +74,21 @@ update_script_dir() {
     SCRIPT_DIR="$(get_script_dir "$depth")"
     
     # Logging
-    info -e "SCRIPT_DIR updated to: $SCRIPT_DIR (depth=$depth)"
+    info"SCRIPT_DIR updated to: $SCRIPT_DIR (depth=$depth)"
 }
 
 check_env() {
     if [ ! -f "$ML_ENV_FILE" ]; then
-        error -e "No active ML environment set."
+        error"No active ML environment set."
         return 1
     fi
     CURRENT_ENV=$(cat "$ML_ENV_FILE")
-    info -e "${GREEN}Current active ML environment: $CURRENT_ENV${NC}"
+    info"${GREEN}Current active ML environment: $CURRENT_ENV${NC}"
     return 0
 }
 
 error_no_env() {
-    error -e "No active ML conda environment found in $ML_ENV_FILE."
+    error"No active ML conda environment found in $ML_ENV_FILE."
     warn "Run the Conda / ML Environment menu and create/activate an environment first."
 }
 
@@ -99,7 +99,7 @@ update_apt_cache() {
 
 detect_gpu() {
     if ! command -v nvidia-smi &>/dev/null; then
-        error -e "NVIDIA driver not detected. Install first."
+        error"NVIDIA driver not detected. Install first."
         return 1
     fi
     GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -n1)
@@ -114,7 +114,7 @@ detect_gpu() {
     else
         info "GPU compute capability: $GPU_CC"
     fi
-    info -e "${GREEN}Detected GPU: $GPU_NAME (Compute Capability $GPU_CC)${NC}"
+    info"${GREEN}Detected GPU: $GPU_NAME (Compute Capability $GPU_CC)${NC}"
 }
 
 
@@ -162,7 +162,7 @@ update_torch_index_url() {
     cuidx=$(get_cu_index)
     
     if [[ -z "$cuidx" || "$cuidx" == "cu0" ]]; then
-        warn -e "${YELLOW}No mapping for detected CUDA ${CUDA_VER:-unknown}. Defaulting to CPU wheel.${NC}" 2>/dev/null || true
+        warn"${YELLOW}No mapping for detected CUDA ${CUDA_VER:-unknown}. Defaulting to CPU wheel.${NC}" 2>/dev/null || true
         TORCH_INDEX_URL=""
     else
         TORCH_INDEX_URL="https://download.pytorch.org/whl/${cuidx}"
