@@ -111,34 +111,30 @@ run_python_file() {
 # ------------------------------
 ensure_conda() {
     ensure_python_cmd || { error "Python not found for active environment."; return 1; }
+    
+    # Try to detect conda env
     if command -v conda &>/dev/null; then
-        export CONDA_DEFAULT_ENV="$(conda info --base >/dev/null && conda info --json | jq -r '.active_prefix_name' 2>/dev/null || echo "")"
-        info "[DEBUG] CONDA_DEFAULT_ENV=${CONDA_DEFAULT_ENV:-<unset>} (returning from ${FUNCNAME[1]})"
+        CONDA_DEFAULT_ENV=$(conda info --json 2>/dev/null | jq -r '.active_prefix // empty')
+        [[ -z "$CONDA_DEFAULT_ENV" ]] && CONDA_DEFAULT_ENV=$(conda info --base 2>/dev/null)
+        info "[DEBUG] CONDA_DEFAULT_ENV=$CONDA_DEFAULT_ENV (returning from ${FUNCNAME[1]})"
         return 0
     fi
     
-    # Hook conda into current shell if available
+    # Hook conda if available
     if [ -f "$HOME/miniforge/etc/profile.d/conda.sh" ]; then
-        # shellcheck disable=SC1090
         source "$HOME/miniforge/etc/profile.d/conda.sh"
         export PATH="$HOME/miniforge/bin:$PATH"
-        export CONDA_DEFAULT_ENV="$(conda info --json | jq -r '.active_prefix_name' 2>/dev/null || echo "")"
-        info "[DEBUG] CONDA_DEFAULT_ENV=${CONDA_DEFAULT_ENV:-<unset>} (returning from ${FUNCNAME[1]})"
+        CONDA_DEFAULT_ENV=$(conda info --json 2>/dev/null | jq -r '.active_prefix // empty')
+        [[ -z "$CONDA_DEFAULT_ENV" ]] && CONDA_DEFAULT_ENV=$(conda info --base 2>/dev/null)
+        info "[DEBUG] CONDA_DEFAULT_ENV=$CONDA_DEFAULT_ENV (returning from ${FUNCNAME[1]})"
         return 0
     fi
     
-    if [ -x "$HOME/miniforge/bin/conda" ]; then
-        # shellcheck disable=SC1090
-        source "$HOME/miniforge/etc/profile.d/conda.sh"
-        export PATH="$HOME/miniforge/bin:$PATH"
-        export CONDA_DEFAULT_ENV="$(conda info --json | jq -r '.active_prefix_name' 2>/dev/null || echo "")"
-        info "[DEBUG] CONDA_DEFAULT_ENV=${CONDA_DEFAULT_ENV:-<unset>} (returning from ${FUNCNAME[1]})"
-        return 0
-    fi
-    
-    warn "Conda not found in PATH. Some operations (create env, conda faiss-gpu) will be unavailable."
+    warn "Conda not found in PATH. Most operations will be unavailable."
+    CONDA_DEFAULT_ENV="Not Found"
     return 1
 }
+
 
 get_active_env() {
     if [ -f "$ML_ENV_FILE" ]; then
