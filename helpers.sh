@@ -30,7 +30,7 @@ NC='\033[0m'  # No Color
 # Environment file
 # ------------------------------
 ML_ENV_FILE="$HOME/.ml_current_env"
-TORCH_INDEX_URL="https://download.pytorch.org/whl/cu128"
+TORCH_INDEX_URL=""
 
 # Generic logger: optional color as first argument
 log() {

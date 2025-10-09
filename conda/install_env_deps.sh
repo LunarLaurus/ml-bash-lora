@@ -73,12 +73,17 @@ preflight_deps() {
 install_lora_deps() {
     info "${BBLUE}[install] Upgrading pip/setuptools/wheel...${NC}"
     
-    ${PIP_CMD[@]} install --upgrade pip setuptools wheel || return 1
+    ${PIP_CMD[@]} install --upgrade pip wheel setuptools || return 1
     info "${BBLUE}[install] Installing LoRA dependencies from requirements.txt...${NC}"
     
     if [[ ! -f "$REQUIREMENTS_FILE" ]]; then
         error "Cannot find requirements.txt at $REQUIREMENTS_FILE"
         return 1
+    fi
+    
+    if [[ -z "${TORCH_INDEX_URL}" ]]; then
+        error "Torch Index Unset: $TORCH_INDEX_URL"
+        update_torch_index_url
     fi
     
     if [[ -z "${TORCH_INDEX_URL}" || -z "${CUDA_VER}" ]]; then
