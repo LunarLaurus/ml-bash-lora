@@ -32,9 +32,21 @@ NC='\033[0m'  # No Color
 ML_ENV_FILE="$HOME/.ml_current_env"
 TORCH_INDEX_URL="https://download.pytorch.org/whl/cu128"
 
-error()  { printf '[ERROR] %s\n' "$*" >&2; }
-warn() { printf '[WARN] %s\n' "$*" >&2; }
-info() { printf '[INFO] %s\n' "$*"; }
+# Generic logger: optional color as first argument
+log() {
+    local color="$1"
+    shift
+    if [ -n "$color" ]; then
+        echo -e "${color}$*${NC}"
+    else
+        echo -e "$*"
+    fi
+}
+
+# Wrappers
+info()  { log "" "[INFO] $*"; }       # No default color
+warn()  { log "$YELLOW" "[WARN] $*"; }
+error() { log "$RED" "[ERROR] $*"; }
 
 # ------------------------------
 # Get the directory of a sourced script relative to call depth
@@ -62,37 +74,47 @@ update_script_dir() {
     SCRIPT_DIR="$(get_script_dir "$depth")"
     
     # Logging
-    echo -e "[INFO] SCRIPT_DIR updated to: $SCRIPT_DIR (depth=$depth)"
+    info -e "SCRIPT_DIR updated to: $SCRIPT_DIR (depth=$depth)"
 }
 
 check_env() {
     if [ ! -f "$ML_ENV_FILE" ]; then
-        echo -e "${RED}No active ML environment set.${NC}"
+        error -e "No active ML environment set."
         return 1
     fi
     CURRENT_ENV=$(cat "$ML_ENV_FILE")
-    echo -e "${GREEN}Current active ML environment: $CURRENT_ENV${NC}"
+    info -e "${GREEN}Current active ML environment: $CURRENT_ENV${NC}"
     return 0
 }
 
 error_no_env() {
-    echo -e "${RED}No active ML conda environment found in $ML_ENV_FILE.${NC}"
-    echo "Run the Conda / ML Environment menu and create/activate an environment first."
+    error -e "No active ML conda environment found in $ML_ENV_FILE."
+    warn "Run the Conda / ML Environment menu and create/activate an environment first."
 }
 
 update_apt_cache() {
-    echo "Updating apt package lists..."
+    info "Updating apt package lists..."
     sudo apt-get update -qq
 }
 
 detect_gpu() {
     if ! command -v nvidia-smi &>/dev/null; then
-        echo -e "${RED}NVIDIA driver not detected. Install first.${NC}"
+        error -e "NVIDIA driver not detected. Install first."
         return 1
     fi
     GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -n1)
-    GPU_CC=$(nvidia-smi --query-gpu=compute_capability --format=csv,noheader | head -n1)
-    echo -e "${GREEN}Detected GPU: $GPU_NAME (Compute Capability $GPU_CC)${NC}"
+    GPU_CC=$(nvidia-smi --query-gpu=compute_capability --format=csv,noheader 2>/dev/null | head -n1)
+    if [ -z "$GPU_CC" ]; then
+        warn "Unable to query 'compute_capability', trying 'compute_cap'."
+        GPU_CC=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -n1)
+    fi
+    If still empty, warn the user
+    if [ -z "$GPU_CC" ]; then
+        warn "Could not detect GPU compute capability."
+    else
+        info "GPU compute capability: $GPU_CC"
+    fi
+    info -e "${GREEN}Detected GPU: $GPU_NAME (Compute Capability $GPU_CC)${NC}"
 }
 
 
