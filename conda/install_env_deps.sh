@@ -110,6 +110,34 @@ get_expected_torch_ver() {
     return 0
 }
 
+list_installed_packages() {
+    info "Listing installed Python packages (pip list):"
+    "${PIP_CMD[@]}" list || warn "Failed to list packages with pip list"
+    
+    info "Listing installed Python packages (pip freeze):"
+    "${PIP_CMD[@]}" freeze || warn "Failed to list packages with pip freeze"
+}
+
+
+remove_user_packages() {
+    read -rp "Enter package names to remove (space-separated): " -a user_pkgs
+    
+    if [[ ${#user_pkgs[@]} -eq 0 ]]; then
+        echo "[INFO] No packages entered. Nothing to do."
+        return 0
+    fi
+    
+    for pkg in "${user_pkgs[@]}"; do
+        # Check if package is installed
+        if "$PYTHON_CMD" -c "import importlib; import sys; sys.exit(0 if importlib.util.find_spec('$pkg') else 1)"; then
+            echo "[INFO] Removing $pkg ..."
+            "${PIP_CMD[@]}" uninstall -y "$pkg" || echo "[WARN] Failed to uninstall $pkg"
+        else
+            echo "[INFO] $pkg not installed, skipping."
+        fi
+    done
+}
+
 install_lora_deps() {
     info "${BBLUE}[install] Upgrading pip/setuptools/wheel...${NC}"
     
@@ -125,8 +153,6 @@ install_lora_deps() {
         error "Torch Index not set, updating."
         update_torch_index_url
     fi
-    
-    remove_cpu_packages
     
     if [[ -z "${TORCH_INDEX_URL}" || -z "${CUDA_VER}" ]]; then
         warn "Installing PyTorch using CPU wheel index..."
@@ -166,55 +192,6 @@ install_lora_deps() {
     fi
     
     info "${BBLUE}[install] Dependency installation complete.${NC}"
-}
-
-remove_cpu_packages() {
-    local pkg
-    local found_any=false
-    
-    if [[ ! -f "$REQUIREMENTS_FILE" ]]; then
-        error "Requirements file not found: $REQUIREMENTS_FILE"
-        return 1
-    fi
-    
-    info "Checking for existing CPU-only versions of packages..."
-    
-    # Loop over each package line in the requirements.txt
-    while IFS= read -r line; do
-        # Skip comments or empty lines
-        [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
-        
-        # Extract package name (before any version specifiers)
-        pkg=$(echo "$line" | sed -E 's/([<>=!~].*)//; s/\s+//g')
-        
-        
-        
-        # Check if the package is installed
-        if "$PYTHON_CMD" -c "
-try:
-    __import__('$pkg')
-except ImportError:
-    import sys
-    sys.exit(1)
-        "; then
-            # Check if it’s a CPU-only version
-            cpu_only=false
-            if [[ "$pkg" == "torch" || "$pkg" == "torchvision" || "$pkg" == "torchaudio" ]]; then
-                # Torch detects CUDA availability
-                cpu_only=$("$PYTHON_CMD" -c "import torch; print(not torch.cuda.is_available())")
-            fi
-            
-            if [[ "$cpu_only" == "True" || "$pkg" != "torch" && "$pkg" != "torchvision" && "$pkg" != "torchaudio" ]]; then
-                found_any=true
-                info "Found existing package: $pkg (will remove)"
-                ${PIP_CMD[@]} uninstall -y "$pkg" || warn "Failed to uninstall $pkg"
-            fi
-        fi
-    done < "$REQUIREMENTS_FILE"
-    
-    if [[ "$found_any" == false ]]; then
-        info "No CPU-only packages found."
-    fi
 }
 
 verify_deps() {

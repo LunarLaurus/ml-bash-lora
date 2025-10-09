@@ -34,6 +34,8 @@ while true; do
     echo "    23) Install LoRA stack (transformers, peft, datasets, accelerate, bitsandbytes)"
     echo "    24) Install RAG stack (faiss, sentence-transformers, langchain)"
     echo "    25) Validate environment"
+    echo "    26) List packages in current environment"
+    echo "    27) Remove package(s) from current environment"
     echo
     echo "30) Management"
     echo "    31) Switch active ML environment"
@@ -57,6 +59,8 @@ while true; do
         23) install_lora_stack ;;
         24) install_rag_stack ;;
         25) validate_env ;;
+        26) list_installed_packages ;;
+        27) remove_user_packages ;;
         31) switch_env ;;
         32) remove_ml_env ;;
         33) show_python_version ;;
