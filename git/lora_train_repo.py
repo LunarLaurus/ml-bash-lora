@@ -142,33 +142,31 @@ def select_model(interactive=True, default_model=None):
         print("Invalid choice, try again.")
 
 
-def configure_lora(interactive=True):
+# Quantization / Precision
+def configure_quantization(interactive=True):
     """
-    Interactive configuration for LoRA fine-tuning.
-    Returns a dictionary with configuration values:
-      - bnb_config (BitsAndBytesConfig or None)
-      - torch_dtype (torch dtype or None)
-      - training_args (dict)
-      - lora_args (dict)
-      - checkpoint_args (dict)
+    Returns (bnb_config, torch_dtype) or (None, None) if skipped.
     """
-    cfg = {}
+    if not interactive:
+        return (
+            BitsAndBytesConfig(
+                load_in_8bit=True, llm_int8_enable_fp32_cpu_offload=True
+            ),
+            None,
+        )
 
-    # ---------------------------
-    # Quantization / Precision
-    # ---------------------------
-    if interactive:
-        print("\nSelect quantization / precision (default=8-bit):")
-        print("1) 8-bit (with CPU offload)")
-        print("2) 4-bit (with CPU offload)")
-        print("3) FP16")
-        print("4) BF16")
-        print("5) FP32 (no quantization)")
-        choice = input("Enter 1-5 [default=1]: ").strip() or "1"
-    else:
-        choice = "1"  # default 8-bit
+    print("\nSelect quantization / precision (press Enter to skip):")
+    options = {
+        "1": "8-bit (with CPU offload)",
+        "2": "4-bit (with CPU offload)",
+        "3": "FP16",
+        "4": "BF16",
+        "5": "FP32 (no quantization)",
+    }
+    for k, v in options.items():
+        print(f"{k}) {v}")
 
-    # Initialize bnb_config and torch_dtype
+    choice = input("Enter 1-5 [skip]: ").strip()
     bnb_config = None
     torch_dtype = None
 
@@ -190,73 +188,134 @@ def configure_lora(interactive=True):
     elif choice == "5":
         torch_dtype = None
 
+    logging.info(f"Quantization/precision selected: {choice or 'skipped'}")
+    return bnb_config, torch_dtype
+
+
+# Memory / Device Map
+def configure_memory(interactive=True):
+    """
+    Returns a dictionary suitable for max_memory, or None if skipped.
+    """
+    if not interactive:
+        return None
+    val = input("Max GPU memory per device (e.g., '80%' or '8GB') [skip]: ").strip()
+    return {"0": val} if val else None
+
+
+# Training hyperparameters
+def configure_training_args(interactive=True):
+    """
+    Returns a dictionary of training args or None if skipped.
+    """
+    if not interactive:
+        return None
+
+    print("\nTraining hyperparameters (press Enter to skip any)")
+    batch_size = input("Batch size per device: ").strip()
+    grad_accum = input("Gradient accumulation steps: ").strip()
+    max_length = input("Max sequence length (tokens): ").strip()
+    epochs = input("Number of training epochs: ").strip()
+    learning_rate = input("Learning rate: ").strip()
+
+    args = {}
+    if batch_size:
+        args["per_device_train_batch_size"] = int(batch_size)
+    if grad_accum:
+        args["gradient_accumulation_steps"] = int(grad_accum)
+    if max_length:
+        args["max_length"] = int(max_length)
+    if epochs:
+        args["num_train_epochs"] = int(epochs)
+    if learning_rate:
+        args["learning_rate"] = float(learning_rate)
+
+    return args or None
+
+
+# LoRA hyperparameters
+def configure_lora_args(interactive=True):
+    """
+    Returns a dictionary of LoRA args or None if skipped.
+    """
+    if not interactive:
+        return None
+
+    print("\nLoRA hyperparameters (press Enter to skip any)")
+    r = input("LoRA rank r: ").strip()
+    alpha = input("LoRA alpha: ").strip()
+    dropout = input("LoRA dropout: ").strip()
+    target_modules = input("Target modules (comma-separated): ").strip()
+
+    args = {}
+    if r:
+        args["r"] = int(r)
+    if alpha:
+        args["lora_alpha"] = int(alpha)
+    if dropout:
+        args["lora_dropout"] = float(dropout)
+    if target_modules:
+        args["target_modules"] = [m.strip() for m in target_modules.split(",")]
+
+    if args:
+        args.setdefault("bias", "none")
+        args.setdefault("task_type", "CAUSAL_LM")
+
+    return args or None
+
+
+# Checkpoint / saving options
+def configure_checkpoint_args(interactive=True):
+    """
+    Returns a dictionary of checkpoint args or None if skipped.
+    """
+    if not interactive:
+        return None
+
+    print("\nCheckpointing options (press Enter to skip any)")
+    save_strategy = input("Save strategy (epoch/steps): ").strip()
+    save_total_limit = input("Number of checkpoints to keep: ").strip()
+
+    args = {}
+    if save_strategy:
+        args["save_strategy"] = save_strategy
+    if save_total_limit:
+        args["save_total_limit"] = int(save_total_limit)
+
+    return args or None
+
+
+def configure_lora(interactive=True):
+    """
+    Wrapper that calls modular LoRA configuration functions.
+    Returns a dictionary with keys:
+      - bnb_config
+      - torch_dtype
+      - max_memory
+      - training_args
+      - lora_args
+      - checkpoint_args
+    Any value may be None if skipped.
+    """
+
+    cfg = {}
+
+    # Quantization / precision
+    bnb_config, torch_dtype = configure_quantization(interactive=interactive)
     cfg["bnb_config"] = bnb_config
     cfg["torch_dtype"] = torch_dtype
-    logging.info(f"Quantization/precision selected: {choice}")
 
-    # ---------------------------
     # Memory / device map
-    # ---------------------------
-    max_mem_input = input(
-        "\nMax GPU memory per device (e.g., '80%' or '8GB') [default=80%]: "
-    ).strip()
-    cfg["max_memory"] = {"0": max_mem_input or "80%"}
+    cfg["max_memory"] = configure_memory(interactive=interactive)
 
-    # ---------------------------
     # Training hyperparameters
-    # ---------------------------
-    print("\nTraining hyperparameters (press Enter to keep defaults)")
-    batch_size = input("Batch size per device [default=1]: ").strip()
-    grad_accum = input("Gradient accumulation steps [default=4]: ").strip()
-    max_length = input("Max sequence length (tokens) [default=1024]: ").strip()
-    epochs = input("Number of training epochs [default=3]: ").strip()
-    learning_rate = input("Learning rate [default=1e-4]: ").strip()
+    cfg["training_args"] = configure_training_args(interactive=interactive)
 
-    cfg["training_args"] = {
-        "per_device_train_batch_size": int(batch_size) if batch_size else 1,
-        "gradient_accumulation_steps": int(grad_accum) if grad_accum else 4,
-        "max_length": int(max_length) if max_length else 1024,
-        "num_train_epochs": int(epochs) if epochs else 3,
-        "learning_rate": float(learning_rate) if learning_rate else 1e-4,
-        "fp16": torch_dtype == torch.float16,
-        "bf16": torch_dtype == torch.bfloat16,
-    }
-
-    # ---------------------------
     # LoRA hyperparameters
-    # ---------------------------
-    print("\nLoRA hyperparameters (press Enter to keep defaults)")
-    r = input("LoRA rank r [default=16]: ").strip()
-    alpha = input("LoRA alpha [default=32]: ").strip()
-    dropout = input("LoRA dropout [default=0.1]: ").strip()
-    target_modules = input(
-        "Target modules (comma-separated) [default=q_proj,v_proj]: "
-    ).strip()
+    cfg["lora_args"] = configure_lora_args(interactive=interactive)
 
-    cfg["lora_args"] = {
-        "r": int(r) if r else 16,
-        "lora_alpha": int(alpha) if alpha else 32,
-        "lora_dropout": float(dropout) if dropout else 0.1,
-        "target_modules": (
-            [m.strip() for m in target_modules.split(",")]
-            if target_modules
-            else ["q_proj", "v_proj"]
-        ),
-        "bias": "none",
-        "task_type": "CAUSAL_LM",
-    }
-
-    # ---------------------------
     # Checkpoint / saving options
-    # ---------------------------
-    print("\nCheckpointing options (press Enter to keep defaults)")
-    save_strategy = input("Save strategy (epoch/steps) [default=epoch]: ").strip()
-    save_total_limit = input("Number of checkpoints to keep [default=2]: ").strip()
-
-    cfg["checkpoint_args"] = {
-        "save_strategy": save_strategy or "epoch",
-        "save_total_limit": int(save_total_limit) if save_total_limit else 2,
-    }
+    cfg["checkpoint_args"] = configure_checkpoint_args(interactive=interactive)
 
     return cfg
 
