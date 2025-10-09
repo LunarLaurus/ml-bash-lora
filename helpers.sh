@@ -83,7 +83,7 @@ check_env() {
         return 1
     fi
     CURRENT_ENV=$(cat "$ML_ENV_FILE")
-    info "${GREEN}Current active ML environment: $CURRENT_ENV"
+    info "${GREEN}Current active ML environment: $CURRENT_ENV${NC}"
     return 0
 }
 

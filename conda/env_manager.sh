@@ -112,10 +112,9 @@ run_python_file() {
 ensure_conda() {
     ensure_python_cmd || { error "Python not found for active environment."; return 1; }
     
-    # Try to detect conda env
     if command -v conda &>/dev/null; then
-        CONDA_DEFAULT_ENV=$(conda info --json 2>/dev/null | jq -r '.active_prefix // empty')
-        [[ -z "$CONDA_DEFAULT_ENV" ]] && CONDA_DEFAULT_ENV=$(conda info --base 2>/dev/null)
+        # Try to detect active env, fallback to base
+        CONDA_DEFAULT_ENV=$(conda info --base 2>/dev/null)
         info "[DEBUG] CONDA_DEFAULT_ENV=$CONDA_DEFAULT_ENV (returning from ${FUNCNAME[1]})"
         return 0
     fi
@@ -124,8 +123,7 @@ ensure_conda() {
     if [ -f "$HOME/miniforge/etc/profile.d/conda.sh" ]; then
         source "$HOME/miniforge/etc/profile.d/conda.sh"
         export PATH="$HOME/miniforge/bin:$PATH"
-        CONDA_DEFAULT_ENV=$(conda info --json 2>/dev/null | jq -r '.active_prefix // empty')
-        [[ -z "$CONDA_DEFAULT_ENV" ]] && CONDA_DEFAULT_ENV=$(conda info --base 2>/dev/null)
+        CONDA_DEFAULT_ENV=$(conda info --base 2>/dev/null)
         info "[DEBUG] CONDA_DEFAULT_ENV=$CONDA_DEFAULT_ENV (returning from ${FUNCNAME[1]})"
         return 0
     fi
@@ -134,6 +132,7 @@ ensure_conda() {
     CONDA_DEFAULT_ENV="Not Found"
     return 1
 }
+
 
 
 get_active_env() {
