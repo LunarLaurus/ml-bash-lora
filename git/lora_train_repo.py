@@ -520,7 +520,7 @@ def get_tokenized_dataset(dataset, tokenizer, output_dir, max_length, num_proc):
             return tokenizer(examples["text"], truncation=True, max_length=max_length)
 
         tokenized_dataset = dataset.map(
-            tokenize, batched=True, num_proc=num_proc, desc="Tokenizing", disable=False
+            tokenize, batched=True, num_proc=num_proc, desc="Tokenizing"
         )
         tokenized_dataset.set_format(type="torch", columns=["input_ids"])
         tokenized_dataset.save_to_disk(cache_file)
