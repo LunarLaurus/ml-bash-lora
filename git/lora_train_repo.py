@@ -320,6 +320,9 @@ def configure_lora_args(interactive=True):
     Returns a dictionary of LoRA args or None if skipped.
     """
     defaults = {
+        "use_rslora": False,
+        "use_dora": False,
+        "init_lora_weights": True,
         "r": 16,
         "lora_alpha": 32,
         "lora_dropout": 0.1,
@@ -331,6 +334,43 @@ def configure_lora_args(interactive=True):
         return defaults.copy()
 
     logging.info("LoRA hyperparameters (press Enter to skip any)")
+
+    logging.info(
+        "use_rslora: If True, uses Rank-Stabilized LoRA. "
+        "This sets the adapter scaling factor to lora_alpha / sqrt(r), which often improves stability. "
+    )
+    use_rslora = (
+        input(f"Use Rank-Stabilized LoRA? (default {defaults['use_rslora']}): ")
+        .strip()
+        .lower()
+    )
+    use_rslora = True if use_rslora in ["true", "t", "yes", "y"] else False
+
+    logging.info(
+        "use_dora: Enable Weight-Decomposed Low-Rank Adaptation (DoRA). "
+        "DoRA decomposes weight updates into magnitude and direction for better performance at low ranks. "
+        "Only supports linear and Conv2D layers. Introduces higher training overhead."
+    )
+    use_dora = input(f"Enable DoRA? (default {defaults['use_dora']}): ").strip().lower()
+    use_dora = True if use_dora in ["true", "t", "yes", "y"] else False
+
+    # init_lora_weights
+    logging.info(
+        "init_lora_weights: How to initialize LoRA adapter weights. Options: "
+        "   True (default, reference implementation, B weights=0), "
+        "   False (random, not a no-op), 'gaussian', 'eva', 'olora', 'pissa', 'pissa_niter_[num]', 'corda', 'loftq', 'orthogonal'."
+    )
+    init_lora_weights = input(
+        f"Initialize LoRA weights (default {defaults['init_lora_weights']}): "
+    ).strip()
+
+    if init_lora_weights == "":
+        init_lora_weights = True
+    elif init_lora_weights.lower() in ["true", "t", "yes", "y"]:
+        init_lora_weights = True
+    elif init_lora_weights.lower() in ["false", "f", "no", "n"]:
+        init_lora_weights = False
+
     logging.info(
         "LoRA rank r: Dimensionality of the low-rank decomposition for LoRA. Higher r = more capacity, more memory."
     )
@@ -381,6 +421,11 @@ def configure_lora_args(interactive=True):
         ),
         "bias": bias if bias else defaults["bias"],
         "task_type": task_type if task_type else defaults["task_type"],
+        "use_rslora": use_rslora if use_rslora else defaults["use_rslora"],
+        "use_dora": use_dora if use_dora else defaults["use_dora"],
+        "init_lora_weights": (
+            init_lora_weights if init_lora_weights else defaults["init_lora_weights"]
+        ),
     }
 
     return args
@@ -397,10 +442,8 @@ def configure_checkpoint_args(interactive=True):
 
     logging.info("Checkpointing options (press Enter to skip any)")
     logging.info(
-        "The checkpoint save strategy to adopt during training. Possible values are:"
-    )
-    logging.info(
-        f"   no: No save is done during training. \n\
+        f"The checkpoint save strategy to adopt during training. Possible values are:\n\
+            no: No save is done during training. \n\
             epoch: Save is done at the end of each epoch. \n\
             steps: Save is done every save_steps. \n\
             best: Save is done whenever a new best_metric is achieved. \n\
@@ -515,18 +558,37 @@ def prepare_tokenizer_and_model(base_model, hf_token, bnb_config=None):
     return tokenizer, model
 
 
-def configure_lora_model(
-    model, r=16, lora_alpha=32, lora_dropout=0.1, target_modules=None
-):
-    target_modules = target_modules or ["q_proj", "v_proj"]
+def configure_lora_model(model, cfg):
+    """
+    Configure LoRA adapters on a model using a config dictionary.
+    Uses defaults if keys are missing.
+    """
+
+    lora_args_cfg = cfg["lora_args"]
+
+    use_rslora = lora_args_cfg.get("use_rslora")
+    use_dora = lora_args_cfg.get("use_dora")
+    init_lora_weights = lora_args_cfg.get("init_lora_weights")
+    r = lora_args_cfg.get("r")
+    lora_alpha = lora_args_cfg.get("lora_alpha")
+    lora_dropout = lora_args_cfg.get("lora_dropout")
+    target_modules = lora_args_cfg.get("target_modules", ["q_proj", "v_proj"])
+    bias = lora_args_cfg.get("bias")
+    task_type = lora_args_cfg.get("task_type")
+
     logging.info("Configuring LoRA...")
     lora_config = LoraConfig(
         r=r,
         lora_alpha=lora_alpha,
-        target_modules=target_modules,
         lora_dropout=lora_dropout,
-        task_type="CAUSAL_LM",
+        target_modules=target_modules,
+        bias=bias,
+        task_type=task_type,
+        use_rslora=use_rslora,
+        use_dora=use_dora,
+        init_lora_weights=init_lora_weights,
     )
+
     model = get_peft_model(model, lora_config)
 
     total_params = sum(p.numel() for p in model.parameters())
@@ -617,14 +679,13 @@ def main():
     bnb_config = cfg["bnb_config"]
     torch_dtype = cfg["torch_dtype"]
     training_args_cfg = cfg["training_args"]
-    lora_args_cfg = cfg["lora_args"]
     checkpoint_args_cfg = cfg["checkpoint_args"]
 
     # -------------------------
     # Tokenizer & model loading
     # -------------------------
     tokenizer, model = prepare_tokenizer_and_model(base_model, hf_token, bnb_config)
-    model = configure_lora_model(model, **lora_args_cfg)
+    model = configure_lora_model(model, cfg)
 
     # -------------------------
     # Tokenize dataset
