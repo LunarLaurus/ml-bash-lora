@@ -36,6 +36,9 @@ RECOMMENDED_MODELS = [
     "microsoft/NextCoder-7B",
     "google/codegemma-7b",
     "aixcoder-7b",
+    "deepseek-ai/deepseek-coder-1.3b-instruct",
+    "yasserrmd/Coder-GRPO-3B",
+    "Novora/CodeClassifier-v1-Tiny",
 ]
 
 HF_TOKEN_FILE = Path.home() / ".huggingface/token"
