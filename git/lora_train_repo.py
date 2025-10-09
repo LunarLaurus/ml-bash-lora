@@ -331,7 +331,6 @@ def configure_lora_args(interactive=True):
         args["target_modules"] = [m.strip() for m in target_modules.split(",")]
 
     if args:
-        args.setdefault("bias", "none")
         args.setdefault("task_type", "CAUSAL_LM")
 
     return args or None
@@ -465,7 +464,6 @@ def configure_lora_model(
         lora_alpha=lora_alpha,
         target_modules=target_modules,
         lora_dropout=lora_dropout,
-        bias="none",
         task_type="CAUSAL_LM",
     )
     model = get_peft_model(model, lora_config)
