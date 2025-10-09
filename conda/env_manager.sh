@@ -1,13 +1,11 @@
 #!/bin/bash
 source "$PROJECT_ROOT/helpers.sh"
 source "$PROJECT_ROOT/cuda/detect_cuda.sh"
+source "$PROJECT_ROOT/conda/install_env_deps.sh"
 
-
+PY_VER=""
 PYTHON_CMD=""
 PIP_CMD=()
-
-# Detect Python version
-PY_VER=""
 
 # ------------------------------
 # Helpers: ensure PYTHON_CMD/PIP_CMD point to current (activated) env
@@ -151,9 +149,9 @@ save_env() {
 # Note: create_env will try to use conda if available, otherwise tell user how to create env.
 # ------------------------------
 prompt_env_details() {
-    read -rp "Enter environment name [lora]: " ENV_NAME
-    ENV_NAME=${ENV_NAME:-lora}
-    read -rp "Enter Python version (3.10 or 3.11 recommended) [3.10]: " PY_VER
+    read -rp "Enter environment name [CHANGE_ME]: " ENV_NAME
+    ENV_NAME=${ENV_NAME:-CHANGE_ME}
+    read -rp "Enter Python version (3.10 or 3.11 recommended) [3.11]: " PY_VER
     PY_VER=${PY_VER:-3.11}
 }
 
@@ -260,23 +258,6 @@ set_cuda_available() {
         info -e "${GREEN}CUDA detected. CUDA_VER='${CUDA_VER:-unknown}'${NC}"
     else
         warn -e "${YELLOW}CUDA not detected.${NC}"
-    fi
-}
-
-# ------------------------------
-# Step 4: Install/ensure PyTorch - uses current env python/pip only
-# ------------------------------
-install_pytorch_if_missing() {
-    info -e "${BLUE}Installing PyTorch stack into current env...${NC}"
-    ensure_python_cmd || { echo -e "${RED}Python not found in active env. Activate env first.${NC}"; return 1; }
-    ensure_conda || { echo -e "${RED}Conda not found. Activate env first.${NC}"; return 1; }
-    
-    if ! "$PYTHON_CMD" -c "import torch" &>/dev/null; then
-        info -e "${GREEN}PyTorch not found in env. Launching wheel selector (this will use the active env)...${NC}"
-        # select_pytorch_wheel should use PYTHON_CMD/PIP_CMD; ensure it does not call conda
-        select_pytorch_wheel
-    else
-        info -e "${GREEN}PyTorch already installed in env.${NC}"
     fi
 }
 
@@ -495,85 +476,6 @@ show_python_version() {
     ensure_python_cmd || { error -e "${RED}Python not found in current shell/environment.${NC}"; return 1; }
     info -e "${GREEN}Python executable:${NC} $PYTHON_CMD"
     "$PYTHON_CMD" --version 2>&1
-}
-
-# Returns the PyTorch CUDA index string (e.g., cu118)
-# Returns cu0 if no CUDA detected or no mapping exists
-get_cu_index() {
-    local idx
-    idx=$(get_cuda_version_index)   # call the function that returns numeric index
-    printf 'cu%s' "$idx"
-}
-
-# Returns the PyTorch CUDA index string (e.g., 118) based on CUDA_VER
-# Returns 0 string if no CUDA detected or no mapping exists
-get_cuda_version_index() {
-    local cuda_ver="${CUDA_VER:-}"
-    local cuidx="0"  # default to 0 if nothing found
-    
-    # Extract major.minor
-    if [ -n "$cuda_ver" ]; then
-        cuda_ver=$(printf '%s' "$cuda_ver" | grep -oE '^[0-9]+\.[0-9]+')
-    fi
-    
-    # Mapping from CUDA version to cu index
-    declare -A CUDA_TO_CUIDX=(
-        ["11.8"]="118"
-        ["12.1"]="121"
-        ["12.2"]="122"
-        ["12.3"]="123"
-        ["12.4"]="124"
-        ["12.6"]="126"
-        ["12.8"]="128"
-        ["12.9"]="129"
-    )
-    
-    # Look up index; if missing, keep default 0
-    cuidx="${CUDA_TO_CUIDX[$cuda_ver]:-$cuidx}"
-    
-    # Return value
-    printf '%s' "$cuidx"
-}
-
-
-# ------------------------------
-# Select and install PyTorch wheel (auto-installs & validates CUDA <-> torch match)
-# ------------------------------
-select_pytorch_wheel() {
-    # Ensure CUDA is detected and persisted if missing
-    detect_cuda >/dev/null 2>&1 || echo -e "${YELLOW}Warning: CUDA not detected; CPU wheel will be used.${NC}"
-    
-    
-    # Use the Python from the active conda env
-    # PYTHON_CMD=$(which python)
-    # PIP_CMD="$PYTHON_CMD -m pip"
-    ensure_python_cmd
-    
-    # Get PyTorch CUDA index
-    cuidx=$(get_cu_index)
-    if [ -z "$cuidx" ]; then
-        warn -e "${YELLOW}No mapping for detected CUDA $cuda_ver_num. Defaulting to CPU wheel.${NC}"
-        SUGGESTED="torch torchvision torchaudio"
-        ${PIP_CMD[@]} install --upgrade $SUGGESTED || return 1
-        return 0
-    fi
-    
-    $PY_VER
-    SUGGESTED="torch torchvision torchaudio --index-url https://download.pytorch.org/whl/${cuidx}"
-    
-    info -e "${GREEN}Installing PyTorch for CUDA $cuda_ver_num using wheel index $cuidx...${NC}"
-    ${PIP_CMD[@]} install --upgrade $SUGGESTED || return 1
-    
-    # Validate installed torch
-    TORCH_REPORTED="$($PYTHON_CMD -c 'import torch; v=getattr(torch.version,"cuda",None); print(v or "None")')"
-    normalized_reported="$(printf '%s' "$TORCH_REPORTED" | sed -E 's/[^0-9.]//g' | grep -oE '^[0-9]+\.[0-9]+')"
-    
-    expected_torch_ver="${CUIDX_TO_TORCH_VER[$cuidx]}"
-    if [ "$normalized_reported" = "$expected_torch_ver" ]; then
-        info -e "${GREEN}Success: Installed PyTorch matches CUDA $cuda_ver_num.${NC}"
-    else
-        warn -e "${RED}Warning: Installed PyTorch reports CUDA $normalized_reported, expected $expected_torch_ver.${NC}"
-    fi
 }
 
 # ------------------------------

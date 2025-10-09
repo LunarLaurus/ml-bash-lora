@@ -140,6 +140,7 @@ install_cuda() {
             return 1
         }
     }
+    update_torch_index_url
 
     echo -e "${GREEN}CUDA $CUDA_INPUT installed successfully.${NC}"
 	echo -e "${GREEN}Run detect_cuda to select and persist this installation.${NC}"

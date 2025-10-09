@@ -30,7 +30,7 @@ NC='\033[0m'  # No Color
 # Environment file
 # ------------------------------
 ML_ENV_FILE="$HOME/.ml_current_env"
-
+TORCH_INDEX_URL="https://download.pytorch.org/whl/cu128"
 
 error()  { printf '[ERROR] %s\n' "$*" >&2; }
 warn() { printf '[WARN] %s\n' "$*" >&2; }
@@ -94,3 +94,59 @@ detect_gpu() {
     GPU_CC=$(nvidia-smi --query-gpu=compute_capability --format=csv,noheader | head -n1)
     echo -e "${GREEN}Detected GPU: $GPU_NAME (Compute Capability $GPU_CC)${NC}"
 }
+
+
+# Returns the PyTorch CUDA index string (e.g., cu118)
+# Returns cu0 if no CUDA detected or no mapping exists
+get_cu_index() {
+    local idx
+    idx=$(get_cuda_version_index)   # call the function that returns numeric index
+    printf 'cu%s' "$idx"
+}
+
+# Returns the PyTorch CUDA index string (e.g., 118) based on CUDA_VER
+# Returns 0 string if no CUDA detected or no mapping exists
+get_cuda_version_index() {
+    local cuda_ver="${CUDA_VER:-}"
+    local cuidx="0"  # default to 0 if nothing found
+    
+    # Extract major.minor
+    if [ -n "$cuda_ver" ]; then
+        cuda_ver=$(printf '%s' "$cuda_ver" | grep -oE '^[0-9]+\.[0-9]+')
+    fi
+    
+    # Mapping from CUDA version to cu index
+    declare -A CUDA_TO_CUIDX=(
+        ["11.8"]="118"
+        ["12.1"]="121"
+        ["12.2"]="122"
+        ["12.3"]="123"
+        ["12.4"]="124"
+        ["12.6"]="126"
+        ["12.8"]="128"
+        ["12.9"]="129"
+    )
+    
+    # Look up index; if missing, keep default 0
+    cuidx="${CUDA_TO_CUIDX[$cuda_ver]:-$cuidx}"
+    
+    # Return value
+    printf '%s' "$cuidx"
+}
+
+update_torch_index_url() {
+    # Get PyTorch CUDA index (e.g., cu118, cu128)
+    local cuidx
+    cuidx=$(get_cu_index)
+    
+    if [[ -z "$cuidx" || "$cuidx" == "cu0" ]]; then
+        warn -e "${YELLOW}No mapping for detected CUDA ${CUDA_VER:-unknown}. Defaulting to CPU wheel.${NC}" 2>/dev/null || true
+        TORCH_INDEX_URL=""
+    else
+        TORCH_INDEX_URL="https://download.pytorch.org/whl/${cuidx}"
+    fi
+    
+    export TORCH_INDEX_URL
+    return 0
+}
+

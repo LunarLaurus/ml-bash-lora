@@ -26,6 +26,7 @@ detect_cuda() {
 
     # No persistent CUDA detected — run interactive selection (as before)
     detect_cuda_select || return 1
+    update_torch_index_url
 
     # show nvcc info if available
     if command -v nvcc &>/dev/null; then
@@ -155,6 +156,7 @@ select_and_persist_cuda() {
     export CUDA_VER
     export PATH="/usr/local/cuda/bin:${PATH}"
     export LD_LIBRARY_PATH="/usr/local/cuda/lib64:${LD_LIBRARY_PATH:-}"
+    update_torch_index_url
 
     set_cuda_env_persistent "$CUDA_PATH"
 	# Apply immediately to current shell
@@ -222,6 +224,7 @@ export LD_LIBRARY_PATH=\"\$CUDA_PATH/lib64:\${LD_LIBRARY_PATH:-}\"
     export CUDA_PATH="$target"
     export PATH="$CUDA_PATH/bin:$PATH"
     export LD_LIBRARY_PATH="$CUDA_PATH/lib64:${LD_LIBRARY_PATH:-}"
+    update_torch_index_url
     echo -e "${GREEN}CUDA environment variables set in current shell.${NC}"
 }
 
@@ -293,6 +296,7 @@ detect_cuda_select() {
     export CUDA_VER
 	export PATH="$CUDA_PATH/bin:$PATH"
 	export LD_LIBRARY_PATH="$CUDA_PATH/lib64:${LD_LIBRARY_PATH:-}"
+    update_torch_index_url
 
     # Persist environment
     set_cuda_env_persistent "$CUDA_PATH"

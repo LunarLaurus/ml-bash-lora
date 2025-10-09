@@ -1,0 +1,10 @@
+numpy==2.3.1
+torch==2.7.1+cu128      # install via PyTorch index (see PyTorch get-started)
+torchvision==<match>+cu128
+torchaudio==2.7.1+cu128
+bitsandbytes==0.41.0
+transformers>=4.40
+peft>=0.8.0
+accelerate
+datasets
+safetensors
