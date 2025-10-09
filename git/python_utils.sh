@@ -378,17 +378,17 @@ extract_code_dataset() {
         return 0
     fi
     resolve_selection_to_folder "$REPO_SEL" || return 1
-    ensure_python_cmd || { error -e "${RED}Python not found. Activate env first.${NC}"; return 1; }
+    ensure_python_cmd || { error "Python not found. Activate env first."; return 1; }
     install_nvm
     
     check_python_deps tree_sitter tree-sitter-c tqdm
     if [ "${#MISSING_PY_DEPS[@]}" -gt 0 ]; then
-        echo -e "${BRED}Missing Python dependencies: ${MISSING_PY_DEPS[*]}${NC}"
+        warn "${BRED}Missing Python dependencies: ${MISSING_PY_DEPS[*]}${NC}"
         auto_install_python_deps || {
-            echo -e "${BRED}Automatic installation failed. Please install manually:${NC} pip install ${MISSING_PY_DEPS[*]}"
+            error "Automatic installation failed. Please install manually: pip install ${MISSING_PY_DEPS[*]}"
             return 1
         }
-        echo -e "${BGREEN}Dependencies installed successfully.${NC}"
+        info "${BGREEN}Dependencies installed successfully.${NC}"
     fi
     
     ensure_folder_exists || return 1
@@ -400,7 +400,7 @@ extract_code_dataset() {
         error "Extraction failed"
         return 1
     }
-    echo -e "${BGREEN}Extraction complete! Dataset saved to '$output_file'${NC}"
+    info "${BGREEN}Extraction complete! Dataset saved to '$output_file'${NC}"
     return 0
 }
 
@@ -410,7 +410,7 @@ train_repo_lora() {
         return 0
     fi
     resolve_selection_to_folder "$REPO_SEL" || return 1
-    ensure_python_cmd || { echo -e "${RED}Python not found. Activate env first.${NC}"; return 1; }
+    ensure_python_cmd || { error "Python not found. Activate env first."; return 1; }
     install_nvm
     
     # compute FOLDER_PATH if index selected
@@ -428,26 +428,31 @@ train_repo_lora() {
         error "Dataset file '$dataset' not found. Run extraction first."
         return 1
     fi
-    list_lora_lib_versions
+    
     info "Checking dependencies..."
-    check_python_deps numpy torch torchvision torchaudio transformers datasets peft torch tqdm numpy scipy sklearn tiktoken protobuf bitsandbytes accelerate safetensors
-    if [ ${#MISSING_PY_DEPS[@]} -gt 0 ]; then
-        echo -e "${BRED}Missing Python dependencies: ${MISSING_PY_DEPS[*]}${NC}"
-        auto_install_python_deps || {
-            echo -e "${BRED}Automatic installation failed. Please install manually:${NC} pip install ${MISSING_PY_DEPS[*]}"
-            return 1
-        }
-        echo -e "${BGREEN}Dependencies installed successfully.${NC}"
+    if list_lora_lib_versions; then
+        info "All required packages installed."
+        "$PYTHON_CMD" -c "import torch; import transformers; import peft; import sklearn; import scipy; print('Python Deps: OK')"
+    else
+        warn "Some packages are missing."
+        check_python_deps numpy torch torchvision torchaudio transformers datasets peft torch tqdm numpy scipy sklearn tiktoken protobuf bitsandbytes accelerate safetensors
+        if [ ${#MISSING_PY_DEPS[@]} -gt 0 ]; then
+            warn "${BRED}Missing Python dependencies: ${MISSING_PY_DEPS[*]}${NC}"
+            auto_install_python_deps || {
+                error "${BRED}Automatic installation failed. Please install manually:${NC} pip install ${MISSING_PY_DEPS[*]}"
+                return 1
+            }
+            info "${BGREEN}Dependencies installed successfully.${NC}"
+        fi
     fi
     
-    "$PYTHON_CMD" -c "import torch; import transformers; import peft; import sklearn; import scipy; print('Python Deps: OK')"
     
     info "Starting LoRA fine-tuning for '$FOLDER_PATH'..."
     run_python_file "$SCRIPT_DIR/lora_train_repo.py" "$dataset" --output_dir "$output" || {
         error "LoRA training failed"
         return 1
     }
-    echo -e "${BGREEN}LoRA training finished. Adapter saved to '$output'${NC}"
+    info "${BGREEN}LoRA training finished. Adapter saved to '$output'${NC}"
     return 0
 }
 

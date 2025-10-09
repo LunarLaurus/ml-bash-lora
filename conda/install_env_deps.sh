@@ -222,19 +222,30 @@ list_lora_lib_versions() {
         error_no_env
         return 1
     fi
-    echo -e "${BCYAN}LoRA-related package versions in '$CURRENT_ENV':${NC}"
+    echo -e "${BCYAN}Checking LoRA/RAG packages in '$CURRENT_ENV':${NC}"
     ensure_python_cmd || { echo -e "${RED}Python not found.${NC}"; return 1; }
     
-    "$PYTHON_CMD" - <<PY
+    "$PYTHON_CMD" - <<'PY'
 import importlib
-pkgs = ["numpy", "torch", "torchvision", "torchaudio", "scipy", "sklearn", "tiktoken", "protobuf","transformers","peft","bitsandbytes","accelerate","datasets","safetensors"]
+pkgs = [
+    "numpy", "torch", "torchvision", "torchaudio", "scipy", "sklearn",
+    "tiktoken", "protobuf", "transformers", "peft", "bitsandbytes",
+    "accelerate", "datasets", "safetensors"
+]
+
+missing = False
 for p in pkgs:
     try:
         m = importlib.import_module(p)
         v = getattr(m, "__version__", None) or getattr(m, "version", None) or "unknown"
         print(f"{p}: {v}")
-    except Exception as e:
-        print(f"{p}: NOT INSTALLED ({e.__class__.__name__})")
+    except Exception:
+        print(f"{p}: NOT INSTALLED")
+        missing = True
+
+# Exit with code 0 if all installed, 1 if any missing
+import sys
+sys.exit(1 if missing else 0)
 PY
 }
 
