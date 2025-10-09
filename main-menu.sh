@@ -5,15 +5,15 @@ echo "SCRIPT_DIR: $SCRIPT_DIR"
 while true; do
     echo -e "\n${GREEN}===== ML/LoRA + RAG Main Menu =====${NC}"
     check_env || true
-
-    echo -e "${BGREEN}1) NVIDIA Drivers"
-    echo -e "${BGREEN}2) CUDA Toolkit"
-    echo -e "${BCYAN}3) Conda / ML Environments"
-    echo -e "${YELLOW}4) Git/Pokemon"
-    echo -e "${YELLOW}5) Diagnostics"
-    echo -e "${CYAN}6) Utilities"
+    
+    echo -e "${BGREEN}1) NVIDIA Drivers${NC}"
+    echo -e "${BGREEN}2) CUDA Toolkit${NC}"
+    echo -e "${BCYAN}3) Conda / ML Environments${NC}"
+    echo -e "${YELLOW}4) Git/Pokemon${NC}"
+    echo -e "${YELLOW}5) Diagnostics${NC}"
+    echo -e "${CYAN}6) Utilities${NC}"
     echo -e "${BRED}0) Exit${NC}"
-
+    
     read -rp "Choice: " choice
     case $choice in
         1) source ./drivers/drivers-menu.sh ;;

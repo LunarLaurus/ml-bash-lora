@@ -337,7 +337,7 @@ install_rag_stack() {
     for pkg in sentence-transformers langchain; do
         if ! "$PYTHON_CMD" -c "import ${pkg}" &>/dev/null; then
             info "${GREEN}Installing ${pkg} into current env...${NC}"
-            "${PIP_CMD[@]}" install "${pkg}" || warn "Failed to pip install ${pkg}.${NC}"
+            "${PIP_CMD[@]}" install "${pkg}" || warn "Failed to pip install ${pkg}."
         else
             info "${GREEN}${pkg} already installed in current env.${NC}"
         fi
