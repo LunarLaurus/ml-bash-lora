@@ -19,6 +19,7 @@ declare -A CUIDX_TO_TORCH_VER=(
 # Step 4: Install/ensure PyTorch - uses current env python/pip only
 # ------------------------------
 install_pytorch_if_missing() {
+    check_env || { error "Error"; return 1; }
     info "${BBLUE}Installing PyTorch stack into current env...${NC}"
     process_deps_lora || { error "Failed to properly set up and install dependencies!"; return 1; }
 }
@@ -69,16 +70,16 @@ preflight_deps() {
     info "${CYAN}[preflight] Checking Python and Conda environment...${NC}"
     
     ensure_python_cmd || { error "Python not found. Activate env first."; return 1; }
-    info "${CYAN}[preflight] Python found: $(python --version 2>/dev/null)${NC}"
+    info "${CYAN}[preflight] Python found: $($PYTHON_CMD --version 2>/dev/null)${NC}"
     
     ensure_conda || { error "Conda not found. Activate env first."; return 1; }
     info "${CYAN}[preflight] Conda env: ${CONDA_DEFAULT_ENV:-unknown}${NC}"
     
-    info "${GREEN}[preflight] Detecting CUDA version...${NC}"
+    info "${BGREEN}[preflight] Detecting CUDA version...${NC}"
     if ! detect_cuda >/dev/null 2>&1; then
         warn " CUDA not detected; CPU wheel will be used."
     fi
-    info "${GREEN}[preflight] CUDA detected: ${CUDA_VER:-none}${NC}"
+    info "${BGREEN}[preflight] CUDA detected: ${CUDA_VER:-none}${NC}"
     
     info "${CYAN}[preflight] Environment check complete.${NC}"
     return 0
@@ -125,6 +126,8 @@ install_lora_deps() {
         update_torch_index_url
     fi
     
+    remove_cpu_packages
+    
     if [[ -z "${TORCH_INDEX_URL}" || -z "${CUDA_VER}" ]]; then
         warn "Installing PyTorch using CPU wheel index..."
         ${PIP_CMD[@]} install -r "$REQUIREMENTS_FILE" || return 1
@@ -165,6 +168,47 @@ install_lora_deps() {
     info "${BBLUE}[install] Dependency installation complete.${NC}"
 }
 
+remove_cpu_packages() {
+    local req_file="$1"
+    local pkg
+    local found_any=false
+    
+    if [[ ! -f "$req_file" ]]; then
+        error "Requirements file not found: $req_file"
+        return 1
+    fi
+    
+    info "Checking for existing CPU-only versions of packages..."
+    
+    # Loop over each package line in the requirements.txt
+    while IFS= read -r line; do
+        # Skip comments or empty lines
+        [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
+        
+        # Extract package name (before any version specifiers)
+        pkg=$(echo "$line" | sed -E 's/([<>=!~].*)//; s/\s+//g')
+        
+        # Check if the package is installed
+        if "$PYTHON_CMD" -c "import importlib; import sys; exit(0 if importlib.util.find_spec('$pkg') else 1)"; then
+            # Check if it’s a CPU-only version
+            cpu_only=false
+            if [[ "$pkg" == "torch" || "$pkg" == "torchvision" || "$pkg" == "torchaudio" ]]; then
+                # Torch detects CUDA availability
+                cpu_only=$("$PYTHON_CMD" -c "import torch; print(not torch.cuda.is_available())")
+            fi
+            
+            if [[ "$cpu_only" == "True" || "$pkg" != "torch" && "$pkg" != "torchvision" && "$pkg" != "torchaudio" ]]; then
+                found_any=true
+                info "Found existing package: $pkg (will remove)"
+                ${PIP_CMD[@]} uninstall -y "$pkg" || warn "Failed to uninstall $pkg"
+            fi
+        fi
+    done < "$req_file"
+    
+    if [[ "$found_any" == false ]]; then
+        info "No CPU-only packages found."
+    fi
+}
 
 verify_deps() {
     info "${BCYAN}[verify] Verifying installed packages...${NC}"

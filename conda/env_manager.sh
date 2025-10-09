@@ -5,15 +5,12 @@ source "$PROJECT_ROOT/conda/install_env_deps.sh"
 
 PY_VER=""
 PYTHON_CMD=""
+CONDA_DEFAULT_ENV=""
 PIP_CMD=()
 
-ensure_snake() {
-    ensure_python_cmd || { error "Python not found. Activate env first."; return 1; }
-    ensure_conda || { error "Conda not found. Activate env first."; return 1; }
-}
 
 ensure_requirements(){
-    ensure_snake || { return 1; }
+    ensure_conda || { error "Conda not found. Activate env first."; return 1; }
     detect_cuda >/dev/null 2>&1 || warn "Warning: CUDA not detected; CPU wheel will be used."
     set_cuda_available
 }
@@ -83,7 +80,7 @@ ensure_python_cmd() {
 
 # Run Python inline code in the current environment
 run_python_inline() {
-    ensure_snake || { error "Problem with environment, read above."; return 1; }
+    ensure_conda || { error "Problem with environment, read above."; return 1; }
     "$PYTHON_CMD" - <<'PYCODE'
 # You can put any Python code here
 # Example: print("Hello from Python!")
@@ -92,7 +89,7 @@ PYCODE
 
 # Run a Python script in the current environment with arguments
 run_python_file() {
-    ensure_snake || { error "Problem with environment, read above."; return 1; }
+    ensure_conda || { error "Problem with environment, read above."; return 1; }
     local script="$1"; shift
     if [ ! -f "$script" ]; then
         error "Python script not found: $script"
@@ -115,6 +112,8 @@ run_python_file() {
 ensure_conda() {
     ensure_python_cmd || { error "Python not found for active environment."; return 1; }
     if command -v conda &>/dev/null; then
+        export CONDA_DEFAULT_ENV="$(conda info --base >/dev/null && conda info --json | jq -r '.active_prefix_name' 2>/dev/null || echo "")"
+        info "[DEBUG] CONDA_DEFAULT_ENV=${CONDA_DEFAULT_ENV:-<unset>} (returning from ${FUNCNAME[1]})"
         return 0
     fi
     
@@ -123,6 +122,8 @@ ensure_conda() {
         # shellcheck disable=SC1090
         source "$HOME/miniforge/etc/profile.d/conda.sh"
         export PATH="$HOME/miniforge/bin:$PATH"
+        export CONDA_DEFAULT_ENV="$(conda info --json | jq -r '.active_prefix_name' 2>/dev/null || echo "")"
+        info "[DEBUG] CONDA_DEFAULT_ENV=${CONDA_DEFAULT_ENV:-<unset>} (returning from ${FUNCNAME[1]})"
         return 0
     fi
     
@@ -130,6 +131,8 @@ ensure_conda() {
         # shellcheck disable=SC1090
         source "$HOME/miniforge/etc/profile.d/conda.sh"
         export PATH="$HOME/miniforge/bin:$PATH"
+        export CONDA_DEFAULT_ENV="$(conda info --json | jq -r '.active_prefix_name' 2>/dev/null || echo "")"
+        info "[DEBUG] CONDA_DEFAULT_ENV=${CONDA_DEFAULT_ENV:-<unset>} (returning from ${FUNCNAME[1]})"
         return 0
     fi
     
@@ -193,7 +196,7 @@ create_env() {
     if [ -z "${ENV_NAME:-}" ]; then
         prompt_env_details
     fi
-    ensure_snake || { error "Problem with environment, read above."; return 1; }
+    ensure_conda || { error "Problem with environment, read above."; return 1; }
     
     # If conda available, attempt to create
     if command -v conda &>/dev/null; then
@@ -229,7 +232,7 @@ activate_env() {
         read -rp "Enter environment name to activate: " ENV_NAME
         ENV_NAME=${ENV_NAME:-lora}
     fi
-    ensure_snake || { error "Problem with environment, read above."; return 1; }
+    ensure_conda || { error "Problem with environment, read above."; return 1; }
     
     # Save the tracked env name for menus / later use
     save_env "$ENV_NAME"
@@ -382,7 +385,7 @@ PY
 # ------------------------------
 reinstall_packages() {
     # Use current env python/pip; if not set, attempt to set
-    ensure_snake || { error "Problem with environment, read above."; return 1; }
+    ensure_conda || { error "Problem with environment, read above."; return 1; }
     
     info "${GREEN}Reinstalling curated LoRA packages into current env...${NC}"
     # Call the same install functions which are idempotent
@@ -407,7 +410,7 @@ switch_env() {
     fi
     
     
-    ensure_snake || { error "Problem with environment, read above."; return 1; }
+    ensure_conda || { error "Problem with environment, read above."; return 1; }
     
     # If conda exists, check env presence via conda; otherwise check miniforge env dir
     if command -v conda &>/dev/null; then
@@ -423,7 +426,7 @@ switch_env() {
     fi
     
     save_env "$NEW_ENV"
-    ensure_snake || { error "PYTHON_CMD/PIP_CMD may not be valid after switching."; return 1; }
+    ensure_conda || { error "PYTHON_CMD/PIP_CMD may not be valid after switching."; return 1; }
     info "${GREEN}Active environment updated to '$NEW_ENV' (saved to $ML_ENV_FILE).${NC}"
     if command -v conda &>/dev/null; then
         info "${GREEN}Run: conda activate $NEW_ENV to actually activate it in this shell.${NC}"
@@ -443,7 +446,7 @@ switch_env() {
 # Remove ML Environment / Project
 # ------------------------------
 remove_ml_env() {
-    ensure_snake || { error "Problem with environment, read above."; return 1; }
+    ensure_conda || { error "Problem with environment, read above."; return 1; }
     conda env list
     read -p "Enter the environment name to remove: " ENV_NAME
     if conda env list | grep -qw "$ENV_NAME"; then
@@ -470,7 +473,7 @@ remove_ml_env() {
 # Show Python Version in Active Env (conda-neutral)
 # ------------------------------
 show_python_version() {
-    ensure_snake || { error "Problem with environment, read above."; return 1; }
+    ensure_conda || { error "Problem with environment, read above."; return 1; }
     info "${GREEN}Python executable:${NC} $PYTHON_CMD"
     "$PYTHON_CMD" --version 2>&1
 }

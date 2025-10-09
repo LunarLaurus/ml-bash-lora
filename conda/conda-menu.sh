@@ -20,6 +20,7 @@ ensure_python_cmd || { echo -e "${RED}Python not found for active environment. A
 
 while true; do
     echo -e "\n${BCYAN}=== Conda / ML Environment Menu ===${NC}"
+    check_env || true
     echo "1) Install Miniforge (Conda)"
     echo
     echo "10) Environment creation / activation"
@@ -47,16 +48,16 @@ while true; do
     
     read -rp "Choice: " choice
     case $choice in
-        1) install_conda ;;             # top-level 0 to install conda (kept from previous menu)
+        1) install_conda ;;
         11) prompt_env_details; create_env ;;
         12) activate_env ;;
-        13) run_full_setup ;;           # convenience combined run (create->activate->installs->validate)
+        13) run_full_setup ;;
         21) setup_gpu_cuda ;;
         22) install_pytorch_if_missing ;;
         23) install_lora_stack ;;
         24) install_rag_stack ;;
         25) validate_env ;;
-        31) switch_env ;;               # assumes switch_env exists in env_manager or helpers
+        31) switch_env ;;
         32) remove_ml_env ;;
         33) show_python_version ;;
         34) env_disk_usage ;;
