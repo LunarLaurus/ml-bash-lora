@@ -5,7 +5,7 @@ REQUIREMENTS_FILE="$SCRIPT_DIR/requirements.txt"
 # Step 4: Install/ensure PyTorch - uses current env python/pip only
 # ------------------------------
 install_pytorch_if_missing() {
-    info "${BLUE}Installing PyTorch stack into current env...${NC}"
+    info "${BBLUE}Installing PyTorch stack into current env...${NC}"
     process_deps_lora || { error "Failed to properly set up and install dependencies!"; return 1; }
 }
 
@@ -29,10 +29,10 @@ process_deps_lora() {
     
     # --- Install dependencies ---
     if [[ "$install_done" == false ]]; then
-        info "${BLUE}[process] Installing LoRA dependencies...${NC}"
+        info "${BBLUE}[process] Installing LoRA dependencies...${NC}"
         install_lora_deps || { error "[process] Dependency installation failed. Aborting."; return 1; }
         install_done=true
-        info "${BLUE}[process] LoRA dependencies installed.${NC}"
+        info "${BBLUE}[process] LoRA dependencies installed.${NC}"
     else
         info "${GREEN}[process] Dependencies already installed, skipping.${NC}"
     fi
@@ -71,10 +71,10 @@ preflight_deps() {
 }
 
 install_lora_deps() {
-    info "${BLUE}[install] Upgrading pip/setuptools/wheel...${NC}"
+    info "${BBLUE}[install] Upgrading pip/setuptools/wheel...${NC}"
     
     ${PIP_CMD[@]} install --upgrade pip setuptools wheel || return 1
-    info "${BLUE}[install] Installing LoRA dependencies from requirements.txt...${NC}"
+    info "${BBLUE}[install] Installing LoRA dependencies from requirements.txt...${NC}"
     
     if [[ ! -f "$REQUIREMENTS_FILE" ]]; then
         error "Cannot find requirements.txt at $REQUIREMENTS_FILE"
@@ -97,10 +97,10 @@ install_lora_deps() {
     if [ "$normalized_reported" = "$expected_torch_ver" ]; then
         info "${GREEN}Success: Installed PyTorch matches CUDA $cuda_ver_num.${NC}"
     else
-        warn "${RED}Warning: Installed PyTorch reports CUDA $normalized_reported, expected $expected_torch_ver.${NC}"
+        warn "${RED}Installed PyTorch reports CUDA $normalized_reported, expected $expected_torch_ver.${NC}"
     fi
     
-    info "${BLUE}[install] Dependency installation complete.${NC}"
+    info "${BBLUE}[install] Dependency installation complete.${NC}"
 }
 
 
