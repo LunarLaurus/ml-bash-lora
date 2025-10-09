@@ -31,7 +31,7 @@ while true; do
     echo "20) Install steps (run individually)"
     echo "    21) Detect GPU/CUDA"
     echo "    22) Install/ensure PyTorch"
-    echo "    23) Install LoRA stack (transformers, peft, datasets, accelerate, bitsandbytes)"
+    echo "    xx) Install LoRA stack (transformers, peft, datasets, accelerate, bitsandbytes)"
     echo "    24) Install RAG stack (faiss, sentence-transformers, langchain)"
     echo "    25) Validate environment"
     echo "    26) List packages in current environment"
@@ -58,7 +58,7 @@ while true; do
         13) run_full_setup ;;
         21) setup_gpu_cuda ;;
         22) install_pytorch_if_missing ;;
-        23) install_lora_stack ;;
+        # 23) install_lora_stack ;;
         24) install_rag_stack ;;
         25) validate_env ;;
         26) list_installed_packages ;;

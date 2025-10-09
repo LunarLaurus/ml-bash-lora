@@ -11,40 +11,6 @@ MISSING_PY_DEPS=()
 : "${TS_C_REPO:=${SCRIPT_DIR}/third_party/tree-sitter-c}"
 : "${TS_ASM_REPO:=${SCRIPT_DIR}/third_party/tree-sitter-asm}"
 
-declare -A NUMPY_VERSIONS=(
-    ["3.10"]="1.25.2"
-    ["3.11"]="1.26.4"
-)
-declare -A SCIPY_VERSIONS=(
-    ["3.10"]="1.11.3"
-    ["3.11"]="1.15.3"
-)
-declare -A SKLEARN_VERSIONS=(
-    ["3.10"]="1.7.2"
-    ["3.11"]="1.7.2"
-)
-declare -A TRANSFORMERS_VERSIONS=(
-    ["3.10"]="4.36.2"
-    ["3.11"]="4.36.2"
-)
-declare -A PEFT_VERSIONS=(
-    ["3.10"]="0.17.1"
-    ["3.11"]="0.17.1"
-)
-declare -A TORCH_VERSIONS=(
-    ["3.10"]="0.17.1"
-    ["3.11"]="0.17.1"
-)
-declare -A TORCH_VISION_VERSIONS=(
-    ["3.10"]="0.17.1"
-    ["3.11"]="0.17.1"
-)
-declare -A TORCH_AUDIO_VERSIONS=(
-    ["3.10"]="0.17.1"
-    ["3.11"]="0.17.1"
-)
-
-
 
 # ----------------------
 # Small helper functions
@@ -462,27 +428,6 @@ train_repo_lora() {
         error "Dataset file '$dataset' not found. Run extraction first."
         return 1
     fi
-    
-    NUMPY_VER="${NUMPY_VERSIONS[$PY_VER]}"
-    SCIPY_VER="${SCIPY_VERSIONS[$PY_VER]}"
-    SKLEARN_VER="${SKLEARN_VERSIONS[$PY_VER]}"
-    TRANSFORMERS_VER="${TRANSFORMERS_VERSIONS[$PY_VER]}"
-    PEFT_VER="${PEFT_VERSIONS[$PY_VER]}"
-    
-    # Exit if Python version is not supported
-    if [[ -z "$NUMPY_VER" || -z "$SCIPY_VER" ]]; then
-        error "Unsupported Python version: $PY_VER"
-        exit 1
-    fi
-    
-    info "Installing potentially missing dependencies..."
-    "${PIP_CMD[@]}" install --upgrade \
-    numpy=="$NUMPY_VER" \
-    scipy=="$SCIPY_VER" \
-    scikit-learn=="$SKLEARN_VER" \
-    transformers=="$TRANSFORMERS_VER"
-    
-    "${PIP_CMD[@]}" install --upgrade --force-reinstall accelerate bitsandbytes peft
     
 "$PYTHON_CMD" - <<PY
 import importlib
