@@ -7,6 +7,17 @@ PY_VER=""
 PYTHON_CMD=""
 PIP_CMD=()
 
+ensure_snake() {
+    ensure_python_cmd || { error "Python not found. Activate env first."; return 1; }
+    ensure_conda || { error "Conda not found. Activate env first."; return 1; }
+}
+
+ensure_requirements(){
+    ensure_snake || { return 1; }
+    detect_cuda >/dev/null 2>&1 || warn "Warning: CUDA not detected; CPU wheel will be used."
+    set_cuda_available
+}
+
 # ------------------------------
 # Helpers: ensure PYTHON_CMD/PIP_CMD point to current (activated) env
 # ------------------------------
@@ -14,7 +25,7 @@ ensure_python_cmd() {
     # Already set and valid?
     if [ -n "${PYTHON_CMD:-}" ] && [ -x "$PYTHON_CMD" ]; then
         if ! command -v "$PYTHON_CMD" &>/dev/null; then
-            echo -e "${YELLOW}Warning: PYTHON_CMD exists but not executable. Resetting.${NC}"
+            warn "Warning: PYTHON_CMD exists but not executable. Resetting."
             PYTHON_CMD=""
             PIP_CMD=()
         else
@@ -31,11 +42,10 @@ ensure_python_cmd() {
         candidate="$HOME/miniforge/envs/${CURRENT_ENV}/bin/python"
         if [ -x "$candidate" ]; then
             PYTHON_CMD="$candidate"
-            
             PY_VER=$($PYTHON_CMD -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
             info "Detected Python version: $PY_VER"
         else
-            echo -e "${YELLOW}Python not found at $candidate${NC}"
+            warn "Python not found at $candidate"
         fi
     fi
     
@@ -49,7 +59,7 @@ ensure_python_cmd() {
     
     # Check final python
     if [ -z "${PYTHON_CMD:-}" ] || [ ! -x "$PYTHON_CMD" ]; then
-        echo -e "${RED}No valid Python found in current shell or env.${NC}"
+        error "No valid Python found in current shell or env."
         PYTHON_CMD=""
         PIP_CMD=()
         return 1
@@ -60,9 +70,9 @@ ensure_python_cmd() {
     
     # Ensure pip is installed
     if ! "${PIP_CMD[@]}" --version &>/dev/null; then
-        echo -e "${YELLOW}pip not found; bootstrapping pip in this Python...${NC}"
+        warn "pip not found; bootstrapping pip in this Python..."
         "$PYTHON_CMD" -m ensurepip --upgrade || {
-            echo -e "${RED}Failed to bootstrap pip${NC}"
+            error "Failed to bootstrap pip"
             PIP_CMD=()
             return 1
         }
@@ -73,8 +83,7 @@ ensure_python_cmd() {
 
 # Run Python inline code in the current environment
 run_python_inline() {
-    ensure_python_cmd || { echo -e "${RED}Python not found for active environment.${NC}"; return 1; }
-    
+    ensure_snake || { error "Problem with environment, read above."; return 1; }
     "$PYTHON_CMD" - <<'PYCODE'
 # You can put any Python code here
 # Example: print("Hello from Python!")
@@ -83,18 +92,17 @@ PYCODE
 
 # Run a Python script in the current environment with arguments
 run_python_file() {
-    ensure_python_cmd || { echo -e "${RED}Python not found for active environment.${NC}"; return 1; }
-    
+    ensure_snake || { error "Problem with environment, read above."; return 1; }
     local script="$1"; shift
     if [ ! -f "$script" ]; then
-        echo -e "${RED}Python script not found: $script${NC}"
+        error "Python script not found: $script"
         return 1
     fi
     
     "$PYTHON_CMD" "$script" "$@"
     local rc=$?
     if [ $rc -ne 0 ]; then
-        echo -e "${RED}Python script '$script' failed (exit $rc)${NC}"
+        error "Python script '$script' failed (exit $rc)"
     fi
     return $rc
 }
@@ -105,6 +113,7 @@ run_python_file() {
 # (but most functions will not call conda; they use current activated env's python/pip)
 # ------------------------------
 ensure_conda() {
+    ensure_python_cmd || { error "Python not found for active environment."; return 1; }
     if command -v conda &>/dev/null; then
         return 0
     fi
@@ -124,7 +133,7 @@ ensure_conda() {
         return 0
     fi
     
-    echo -e "${YELLOW}Conda not found in PATH. Some operations (create env, conda faiss-gpu) will be unavailable.${NC}"
+    warn "Conda not found in PATH. Some operations (create env, conda faiss-gpu) will be unavailable."
     return 1
 }
 
@@ -165,7 +174,7 @@ handle_existing_env() {
     fi
     
     if [ "$exists" -eq 1 ]; then
-        info -e "${GREEN}Environment $ENV_NAME already exists.${NC}"
+        info "${GREEN}Environment $ENV_NAME already exists.${NC}"
         read -rp "Do you want to (R)einstall packages, (S)kip creation, or (E)xit? [S]: " choice
         choice=${choice:-S}
         case "$choice" in
@@ -184,25 +193,27 @@ create_env() {
     if [ -z "${ENV_NAME:-}" ]; then
         prompt_env_details
     fi
-    ensure_conda || { echo -e "${RED}Conda not found. Activate env first.${NC}"; return 1; }
+    ensure_snake || { error "Problem with environment, read above."; return 1; }
     
     # If conda available, attempt to create
     if command -v conda &>/dev/null; then
         if conda env list | grep -qw "$ENV_NAME"; then
-            warn -e "${YELLOW}Environment '$ENV_NAME' already exists (conda).${NC}"
+            warn "Environment '$ENV_NAME' already exists (conda)."
+            activate_env
             return 0
         fi
-        info -e "${GREEN}Creating conda env '$ENV_NAME' (python $PY_VER)...${NC}"
+        info "${GREEN}Creating conda env '$ENV_NAME' (python $PY_VER)...${NC}"
         conda create -y -n "$ENV_NAME" python="$PY_VER" || {
-            error -e "${RED}Failed to create environment with conda.${NC}"
+            error "Failed to create environment with conda."
             return 1
         }
-        info -e "${GREEN}Environment '$ENV_NAME' created.${NC}"
+        info "${GREEN}Environment '$ENV_NAME' created.${NC}"
+        activate_env
         return 0
     fi
     
     # No conda: try to create directory placeholder and instruct user
-    warn -e "${YELLOW}Conda not available. Please create the environment manually (e.g. locally or with conda on another shell).${NC}"
+    warn "Conda not available. Please create the environment manually (e.g. locally or with conda on another shell)."
     warn "Suggested command (run when conda is available):"
     warn "  conda create -y -n $ENV_NAME python=$PY_VER"
     return 1
@@ -218,16 +229,16 @@ activate_env() {
         read -rp "Enter environment name to activate: " ENV_NAME
         ENV_NAME=${ENV_NAME:-lora}
     fi
-    ensure_conda || { echo -e "${RED}Conda not found. Activate env first.${NC}"; return 1; }
+    ensure_snake || { error "Problem with environment, read above."; return 1; }
     
     # Save the tracked env name for menus / later use
     save_env "$ENV_NAME"
     
     # Set PYTHON_CMD/PIP_CMD based on current shell python (assumes env activated)
     if ! ensure_python_cmd; then
-        warn -e "${YELLOW}Could not determine python for environment $ENV_NAME. Ensure it is activated in this shell or that $HOME/miniforge/envs/$ENV_NAME/bin/python exists.${NC}"
+        warn "Could not determine python for environment $ENV_NAME. Ensure it is activated in this shell or that $HOME/miniforge/envs/$ENV_NAME/bin/python exists."
     else
-        info -e "${GREEN}Environment '$ENV_NAME' set. PYTHON_CMD=${PYTHON_CMD}${NC}"
+        info "${GREEN}Environment '$ENV_NAME' set. PYTHON_CMD=${PYTHON_CMD}${NC}"
     fi
 }
 
@@ -236,8 +247,7 @@ activate_env() {
 # ------------------------------
 setup_gpu_cuda() {
     detect_gpu 2>/dev/null || true
-    detect_cuda 2>/dev/null || true
-    set_cuda_available
+    ensure_requirements
 }
 
 set_cuda_available() {
@@ -255,9 +265,9 @@ set_cuda_available() {
     fi
     
     if [ "${CUDA_AVAILABLE:-0}" -eq 1 ]; then
-        info -e "${GREEN}CUDA detected. CUDA_VER='${CUDA_VER:-unknown}'${NC}"
+        info "${GREEN}CUDA detected. CUDA_VER='${CUDA_VER:-unknown}'${NC}"
     else
-        warn -e "${YELLOW}CUDA not detected.${NC}"
+        warn "CUDA not detected."
     fi
 }
 
@@ -265,19 +275,15 @@ set_cuda_available() {
 # Step 5: Install LoRA stack - pip into current env
 # ------------------------------
 install_lora_stack() {
-    echo -e "${BLUE}Installing LoRA stack into current env...${NC}"
-    ensure_python_cmd || { echo -e "${RED}Python not found. Activate env first.${NC}"; return 1; }
-    ensure_conda || { echo -e "${RED}Conda not found. Activate env first.${NC}"; return 1; }
-    detect_cuda >/dev/null 2>&1 || echo -e "${YELLOW}Warning: CUDA not detected; CPU wheel will be used.${NC}"
-    set_cuda_available
-    
+    info "${BLUE}Installing LoRA stack into current env...${NC}"
+    ensure_requirements || { error "Problem with environment, read above."; return 1; }
     local pkgs=(transformers peft datasets accelerate)
     for pkg in "${pkgs[@]}"; do
         if ! "$PYTHON_CMD" -c "import ${pkg}" &>/dev/null; then
-            info -e "${GREEN}Installing ${pkg} into current env...${NC}"
-            "${PIP_CMD[@]}" install --upgrade "${pkg}" || echo -e "${YELLOW}Failed to install ${pkg} via pip.${NC}"
+            info "${GREEN}Installing ${pkg} into current env...${NC}"
+            "${PIP_CMD[@]}" install --upgrade "${pkg}" || warn "Failed to install ${pkg} via pip."
         else
-            info -e "${GREEN}${pkg} already installed in current env.${NC}"
+            info "${GREEN}${pkg} already installed in current env.${NC}"
         fi
     done
     
@@ -287,16 +293,16 @@ install_lora_stack() {
         cuda_version_number=$(get_cuda_version_index)
         
         if [ "${CUDA_AVAILABLE:-0}" -eq 1 ] && [ "$cuda_version_number" -ne 0 ]; then
-            info -e "${GREEN}Attempting to install bitsandbytes (GPU-capable wheel if available)...${NC}"
+            info "${GREEN}Attempting to install bitsandbytes (GPU-capable wheel if available)...${NC}"
             "${PIP_CMD[@]}" install --upgrade "bitsandbytes-cuda$cuda_version_number" || \
-            error -e "${RED}bitsandbytes install failed.${NC}"
+            error "bitsandbytes install failed."
         else
-            info -e "${YELLOW}Installing bitsandbytes without detected CUDA; GPU features may not work.${NC}"
+            info "${YELLOW}Installing bitsandbytes without detected CUDA; GPU features may not work.${NC}"
             "${PIP_CMD[@]}" install --upgrade bitsandbytes || \
-            error -e "${RED}bitsandbytes install failed.${NC}"
+            error "bitsandbytes install failed."
         fi
     else
-        info -e "${GREEN}bitsandbytes already installed in current env.${NC}"
+        info "${GREEN}bitsandbytes already installed in current env.${NC}"
     fi
     
     
@@ -306,12 +312,8 @@ install_lora_stack() {
 # Step 6: Install RAG stack - prefer GPU faiss only when conda available; else fall back to pip CPU
 # ------------------------------
 install_rag_stack() {
-    info -e "${BLUE}Installing RAG stack into current env...${NC}"
-    ensure_python_cmd || { echo -e "${RED}Python not found. Activate env first.${NC}"; return 1; }
-    ensure_conda || { echo -e "${RED}Conda not found. Activate env first.${NC}"; return 1; }
-    detect_cuda >/dev/null 2>&1 || echo -e "${YELLOW}Warning: CUDA not detected; CPU wheel will be used.${NC}"
-    set_cuda_available
-    
+    info "${BLUE}Installing RAG stack into current env...${NC}"
+    ensure_requirements || { error "Problem with environment, read above."; return 1; }
     read -rp "Install RAG stack (faiss, sentence-transformers, langchain)? [y/N]: " rag
     if [[ ! "$rag" =~ ^[Yy]$ ]]; then
         return 0
@@ -319,25 +321,25 @@ install_rag_stack() {
     
     # FAISS: prefer faiss-gpu via conda if conda exists and user has CUDA; otherwise use pip cpu option
     if [ "${CUDA_AVAILABLE:-0}" -eq 1 ] && command -v conda &>/dev/null; then
-        info -e "${GREEN}Conda available and CUDA detected.${NC}"
-        info -e "${GREEN}Attempting: conda install -y -n <active env> -c pytorch faiss-gpu${NC}"
+        info "${GREEN}Conda available and CUDA detected.${NC}"
+        info "${GREEN}Attempting: conda install -y -n <active env> -c pytorch faiss-gpu${NC}"
         # If conda is present but we must not call it directly (user said avoid), we still try to call only if available.
         if ! conda install -y -n "${ENV_NAME:-$(cat $ML_ENV_FILE 2>/dev/null || echo '')}" -c pytorch faiss-gpu; then
-            warn -e "${YELLOW}conda faiss-gpu failed or not possible. Falling back to pip faiss-cpu.${NC}"
-            "${PIP_CMD[@]}" install faiss-cpu || error -e "${RED}faiss-cpu pip install failed.${NC}"
+            warn "conda faiss-gpu failed or not possible. Falling back to pip faiss-cpu."
+            "${PIP_CMD[@]}" install faiss-cpu || error "faiss-cpu pip install failed."
         fi
     else
-        warn -e "${GREEN}Installing faiss-cpu into current env (no conda/CUDA combo detected)...${NC}"
-        "${PIP_CMD[@]}" install faiss-cpu || error -e "${YELLOW}faiss-cpu pip install failed.${NC}"
+        warn "Installing faiss-cpu into current env (no conda/CUDA combo detected)..."
+        "${PIP_CMD[@]}" install faiss-cpu || error "faiss-cpu pip install failed."
     fi
     
     # sentence-transformers and langchain via pip into current env
     for pkg in sentence-transformers langchain; do
         if ! "$PYTHON_CMD" -c "import ${pkg}" &>/dev/null; then
-            info -e "${GREEN}Installing ${pkg} into current env...${NC}"
-            "${PIP_CMD[@]}" install "${pkg}" || warn -e "${YELLOW}Failed to pip install ${pkg}.${NC}"
+            info "${GREEN}Installing ${pkg} into current env...${NC}"
+            "${PIP_CMD[@]}" install "${pkg}" || warn "Failed to pip install ${pkg}.${NC}"
         else
-            info -e "${GREEN}${pkg} already installed in current env.${NC}"
+            info "${GREEN}${pkg} already installed in current env.${NC}"
         fi
     done
 }
@@ -351,14 +353,8 @@ validate_env() {
         ENV_NAME="$(cat "$ML_ENV_FILE")"
     fi
     
-    echo -e "${GREEN}Validating environment '${ENV_NAME:-(unknown)}' using current python...${NC}"
-    
-    detect_gpu || true
-    detect_cuda || true
-    set_cuda_available
-    
-    ensure_python_cmd || { echo -e "${RED}Python not found in current shell. Activate env first.${NC}"; return 1; }
-    ensure_conda || { echo -e "${RED}Conda not found. Activate env first.${NC}"; return 1; }
+    echo "${GREEN}Validating environment '${ENV_NAME:-(unknown)}' using current python...${NC}"
+    setup_gpu_cuda
     
     "$PYTHON_CMD" - <<'PY'
 import sys
@@ -378,7 +374,7 @@ except Exception as e:
     print("bitsandbytes: NOT OK or not installed:", e)
 PY
     
-    info -e "${GREEN}Validation complete.${NC}"
+    info "${GREEN}Validation complete.${NC}"
 }
 
 # ------------------------------
@@ -386,9 +382,9 @@ PY
 # ------------------------------
 reinstall_packages() {
     # Use current env python/pip; if not set, attempt to set
-    ensure_python_cmd || { error -e "${RED}Python for current env not found. Activate env first.${NC}"; return 1; }
+    ensure_snake || { error "Problem with environment, read above."; return 1; }
     
-    info -e "${GREEN}Reinstalling curated LoRA packages into current env...${NC}"
+    info "${GREEN}Reinstalling curated LoRA packages into current env...${NC}"
     # Call the same install functions which are idempotent
     install_pytorch_if_missing || true
     install_lora_stack || true
@@ -397,7 +393,7 @@ reinstall_packages() {
     if [[ "$do_rag" =~ ^[Yy]$ ]]; then
         install_rag_stack || true
     fi
-    echo -e "${GREEN}Reinstall finished.${NC}"
+    info "${GREEN}Reinstall finished.${NC}"
 }
 
 # ------------------------------
@@ -406,39 +402,40 @@ reinstall_packages() {
 switch_env() {
     read -rp "Enter environment name to switch to: " NEW_ENV
     if [ -z "$NEW_ENV" ]; then
-        warn -e "${YELLOW}No env given.${NC}"
+        warn "No env given."
         return 1
     fi
     
-    ensure_conda
+    
+    ensure_snake || { error "Problem with environment, read above."; return 1; }
     
     # If conda exists, check env presence via conda; otherwise check miniforge env dir
     if command -v conda &>/dev/null; then
         if ! conda env list | grep -qw "$NEW_ENV"; then
-            warn -e "${RED}Environment '$NEW_ENV' not found via conda.${NC}"
+            warn "Environment '$NEW_ENV' not found via conda."
             return 1
         fi
     else
         if [ ! -d "$HOME/miniforge/envs/$NEW_ENV" ]; then
-            warn -e "${RED}Environment directory not found at $HOME/miniforge/envs/$NEW_ENV and conda not available.${NC}"
+            error "Environment directory not found at $HOME/miniforge/envs/$NEW_ENV and conda not available."
             return 1
         fi
     fi
     
     save_env "$NEW_ENV"
-    ensure_python_cmd || echo -e "${YELLOW}Warning: PYTHON_CMD/PIP_CMD may not be valid after switching.${NC}"
-    info -e "${GREEN}Active environment updated to '$NEW_ENV' (saved to $ML_ENV_FILE).${NC}"
+    ensure_snake || { error "PYTHON_CMD/PIP_CMD may not be valid after switching."; return 1; }
+    info "${GREEN}Active environment updated to '$NEW_ENV' (saved to $ML_ENV_FILE).${NC}"
     if command -v conda &>/dev/null; then
-        info -e "${GREEN}Run: conda activate $NEW_ENV${NC} to actually activate it in this shell."
+        info "${GREEN}Run: conda activate $NEW_ENV to actually activate it in this shell.${NC}"
     else
-        warn -e "${YELLOW}No conda in PATH: activate the environment by starting a shell where it is available or ensure $HOME/miniforge/envs/$NEW_ENV/bin is in PATH.${NC}"
+        warn "No conda in PATH: activate the environment by starting a shell where it is available or ensure $HOME/miniforge/envs/$NEW_ENV/bin is in PATH."
     fi
     
     # attempt to update PYTHON_CMD/PIP_CMD based on saved env
     PYTHON_CMD="$HOME/miniforge/envs/$NEW_ENV/bin/python"
     if [ -x "$PYTHON_CMD" ]; then
         PIP_CMD="$PYTHON_CMD -m pip"
-        info -e "${GREEN}PYTHON_CMD updated to $PYTHON_CMD (if you activated env elsewhere this will match).${NC}"
+        info "${GREEN}PYTHON_CMD updated to $PYTHON_CMD (if you activated env elsewhere this will match).${NC}"
     fi
 }
 
@@ -446,7 +443,7 @@ switch_env() {
 # Remove ML Environment / Project
 # ------------------------------
 remove_ml_env() {
-    ensure_conda
+    ensure_snake || { error "Problem with environment, read above."; return 1; }
     conda env list
     read -p "Enter the environment name to remove: " ENV_NAME
     if conda env list | grep -qw "$ENV_NAME"; then
@@ -454,18 +451,18 @@ remove_ml_env() {
         if [[ "$CONFIRM" =~ ^[Yy]$ ]]; then
             conda deactivate &>/dev/null || true
             conda env remove -n "$ENV_NAME"
-            info -e "${GREEN}Environment '$ENV_NAME' removed successfully.${NC}"
+            info "${GREEN}Environment '$ENV_NAME' removed successfully.${NC}"
             
             # Clear active environment if it was the removed one
             if [ -f "$ML_ENV_FILE" ] && grep -qw "$ENV_NAME" "$ML_ENV_FILE"; then
                 rm -f "$ML_ENV_FILE"
-                info -e "${GREEN}Active environment cleared.${NC}"
+                info "${GREEN}Active environment cleared.${NC}"
             fi
         else
             info "Aborted environment removal."
         fi
     else
-        warn -e "${RED}Environment '$ENV_NAME' does not exist.${NC}"
+        warn "Environment '$ENV_NAME' does not exist."
     fi
 }
 
@@ -473,8 +470,8 @@ remove_ml_env() {
 # Show Python Version in Active Env (conda-neutral)
 # ------------------------------
 show_python_version() {
-    ensure_python_cmd || { error -e "${RED}Python not found in current shell/environment.${NC}"; return 1; }
-    info -e "${GREEN}Python executable:${NC} $PYTHON_CMD"
+    ensure_snake || { error "Problem with environment, read above."; return 1; }
+    info "${GREEN}Python executable:${NC} $PYTHON_CMD"
     "$PYTHON_CMD" --version 2>&1
 }
 
@@ -482,8 +479,8 @@ show_python_version() {
 # Convenience: run full setup using the steps above (uses current env; create_env may require conda)
 # ------------------------------
 run_full_setup() {
-    create_env || { warn -e "${YELLOW}create_env failed or skipped.${NC}"; }
-    activate_env || { warn -e "${YELLOW}activate_env failed.${NC}"; }
+    create_env || { warn "create_env failed or skipped."; }
+    activate_env || { warn "activate_env failed."; }
     setup_gpu_cuda || true
     install_pytorch_if_missing || true
     install_lora_stack || true
