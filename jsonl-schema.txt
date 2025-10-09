@@ -1,0 +1,11 @@
+{
+    "type": "function" | "asm_block" | "full_file" | "chunk",
+    "name": "function_name_or_label_or_filename",
+    "text": "<code chunk or full text>",
+    "source_file": "relative/path/to/file.c",
+    "start_line": 123,
+    "end_line": 246,
+    "language": "c" | "asm" | "other",
+    "sha1": "<optional short hash>",
+    "kind": "causal" | "seq2seq" # optional hint for downstream use
+}
