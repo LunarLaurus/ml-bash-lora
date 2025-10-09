@@ -448,7 +448,7 @@ train_repo_lora() {
     
     
     info "Starting LoRA fine-tuning for '$FOLDER_PATH'..."
-    run_python_file "$SCRIPT_DIR/lora_train_repo.py" "$dataset" --output_dir "$output" || {
+    run_python_file "$SCRIPT_DIR/lora_train_repo.py" "$dataset" --output_dir "$output" --interactive || {
         error "LoRA training failed"
         return 1
     }

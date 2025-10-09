@@ -16,6 +16,7 @@ from datasets import load_dataset, Dataset
 from transformers import (
     AutoTokenizer,
     AutoModelForCausalLM,
+    BitsAndBytesConfig,
     Trainer,
     TrainingArguments,
     TrainerCallback,
@@ -141,6 +142,125 @@ def select_model(interactive=True, default_model=None):
         print("Invalid choice, try again.")
 
 
+def configure_lora(interactive=True):
+    """
+    Interactive configuration for LoRA fine-tuning.
+    Returns a dictionary with configuration values:
+      - bnb_config (BitsAndBytesConfig or None)
+      - torch_dtype (torch dtype or None)
+      - training_args (dict)
+      - lora_args (dict)
+      - checkpoint_args (dict)
+    """
+    cfg = {}
+
+    # ---------------------------
+    # Quantization / Precision
+    # ---------------------------
+    if interactive:
+        print("\nSelect quantization / precision (default=8-bit):")
+        print("1) 8-bit (with CPU offload)")
+        print("2) 4-bit (with CPU offload)")
+        print("3) FP16")
+        print("4) BF16")
+        print("5) FP32 (no quantization)")
+        choice = input("Enter 1-5 [default=1]: ").strip() or "1"
+    else:
+        choice = "1"  # default 8-bit
+
+    # Initialize bnb_config and torch_dtype
+    bnb_config = None
+    torch_dtype = None
+
+    if choice == "1":
+        bnb_config = BitsAndBytesConfig(
+            load_in_8bit=True, llm_int8_enable_fp32_cpu_offload=True
+        )
+    elif choice == "2":
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            llm_int8_enable_fp32_cpu_offload=True,
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_quant_type="nf4",
+        )
+    elif choice == "3":
+        torch_dtype = torch.float16
+    elif choice == "4":
+        torch_dtype = torch.bfloat16
+    elif choice == "5":
+        torch_dtype = None
+
+    cfg["bnb_config"] = bnb_config
+    cfg["torch_dtype"] = torch_dtype
+    logging.info(f"Quantization/precision selected: {choice}")
+
+    # ---------------------------
+    # Memory / device map
+    # ---------------------------
+    max_mem_input = input(
+        "\nMax GPU memory per device (e.g., '80%' or '8GB') [default=80%]: "
+    ).strip()
+    cfg["max_memory"] = {"0": max_mem_input or "80%"}
+
+    # ---------------------------
+    # Training hyperparameters
+    # ---------------------------
+    print("\nTraining hyperparameters (press Enter to keep defaults)")
+    batch_size = input("Batch size per device [default=1]: ").strip()
+    grad_accum = input("Gradient accumulation steps [default=4]: ").strip()
+    max_length = input("Max sequence length (tokens) [default=1024]: ").strip()
+    epochs = input("Number of training epochs [default=3]: ").strip()
+    learning_rate = input("Learning rate [default=1e-4]: ").strip()
+
+    cfg["training_args"] = {
+        "per_device_train_batch_size": int(batch_size) if batch_size else 1,
+        "gradient_accumulation_steps": int(grad_accum) if grad_accum else 4,
+        "max_length": int(max_length) if max_length else 1024,
+        "num_train_epochs": int(epochs) if epochs else 3,
+        "learning_rate": float(learning_rate) if learning_rate else 1e-4,
+        "fp16": torch_dtype == torch.float16,
+        "bf16": torch_dtype == torch.bfloat16,
+    }
+
+    # ---------------------------
+    # LoRA hyperparameters
+    # ---------------------------
+    print("\nLoRA hyperparameters (press Enter to keep defaults)")
+    r = input("LoRA rank r [default=16]: ").strip()
+    alpha = input("LoRA alpha [default=32]: ").strip()
+    dropout = input("LoRA dropout [default=0.1]: ").strip()
+    target_modules = input(
+        "Target modules (comma-separated) [default=q_proj,v_proj]: "
+    ).strip()
+
+    cfg["lora_args"] = {
+        "r": int(r) if r else 16,
+        "lora_alpha": int(alpha) if alpha else 32,
+        "lora_dropout": float(dropout) if dropout else 0.1,
+        "target_modules": (
+            [m.strip() for m in target_modules.split(",")]
+            if target_modules
+            else ["q_proj", "v_proj"]
+        ),
+        "bias": "none",
+        "task_type": "CAUSAL_LM",
+    }
+
+    # ---------------------------
+    # Checkpoint / saving options
+    # ---------------------------
+    print("\nCheckpointing options (press Enter to keep defaults)")
+    save_strategy = input("Save strategy (epoch/steps) [default=epoch]: ").strip()
+    save_total_limit = input("Number of checkpoints to keep [default=2]: ").strip()
+
+    cfg["checkpoint_args"] = {
+        "save_strategy": save_strategy or "epoch",
+        "save_total_limit": int(save_total_limit) if save_total_limit else 2,
+    }
+
+    return cfg
+
+
 def get_tokenized_dataset(dataset, tokenizer, output_dir, max_length, num_proc):
     cache_file = Path(output_dir) / "tokenized_dataset.arrow"
 
@@ -165,10 +285,88 @@ def get_tokenized_dataset(dataset, tokenizer, output_dir, max_length, num_proc):
     return tokenized_dataset
 
 
+def load_dataset_from_file(dataset_path):
+    if not os.path.isfile(dataset_path):
+        logging.error(f"Dataset file '{dataset_path}' does not exist.")
+        return None
+
+    logging.info(f"Loading dataset from {dataset_path}...")
+    try:
+        dataset = load_dataset("json", data_files=dataset_path, split="train")
+    except Exception as e:
+        logging.error(f"Failed to load dataset: {e}")
+        return None
+
+    logging.info(f"Dataset loaded: {len(dataset)} samples")
+    return dataset
+
+
+def prepare_tokenizer_and_model(base_model, hf_token, bnb_config=None):
+    logging.info(f"Loading tokenizer and base model ({base_model})...")
+    tokenizer = AutoTokenizer.from_pretrained(base_model, use_auth_token=hf_token)
+    model = AutoModelForCausalLM.from_pretrained(
+        base_model,
+        device_map="auto",
+        quantization_config=bnb_config,
+        use_auth_token=hf_token,
+    )
+    model = prepare_model_for_kbit_training(model)
+    return tokenizer, model
+
+
+def configure_lora_model(model, r=16, alpha=32, dropout=0.1, target_modules=None):
+    target_modules = target_modules or ["q_proj", "v_proj"]
+    logging.info("Configuring LoRA...")
+    lora_config = LoraConfig(
+        r=r,
+        lora_alpha=alpha,
+        target_modules=target_modules,
+        lora_dropout=dropout,
+        bias="none",
+        task_type="CAUSAL_LM",
+    )
+    model = get_peft_model(model, lora_config)
+
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    logging.info(
+        f"Total parameters: {total_params:,}, trainable (LoRA): {trainable_params:,}"
+    )
+    return model
+
+
+def prepare_training_args(
+    output_dir,
+    batch_size=1,
+    grad_accum=4,
+    epochs=3,
+    learning_rate=1e-4,
+    max_length=1024,
+):
+    logging.info("Preparing training arguments...")
+    training_args = TrainingArguments(
+        output_dir=output_dir,
+        per_device_train_batch_size=batch_size,
+        gradient_accumulation_steps=grad_accum,
+        num_train_epochs=epochs,
+        learning_rate=learning_rate,
+        fp16=True,
+        save_total_limit=2,
+        logging_steps=10,
+        save_strategy="epoch",
+        report_to="none",
+    )
+    logging.info(f"Training arguments: {training_args}")
+    return training_args
+
+
 def main():
     setup_logger()
     hf_token = get_hf_token()
 
+    # -------------------------
+    # Argument parsing
+    # -------------------------
     parser = argparse.ArgumentParser(
         description="LoRA fine-tuning on code JSONL dataset"
     )
@@ -180,104 +378,84 @@ def main():
     )
     parser.add_argument("--base_model", help="Base code model to fine-tune")
     parser.add_argument(
-        "--batch_size", type=int, default=1, help="Batch size per device"
-    )
-    parser.add_argument(
-        "--grad_accum", type=int, default=4, help="Gradient accumulation steps"
-    )
-    parser.add_argument(
-        "--epochs", type=int, default=3, help="Number of training epochs"
-    )
-    parser.add_argument(
-        "--max_length", type=int, default=1024, help="Max sequence length (tokens)"
-    )
-    parser.add_argument(
-        "--num_proc", type=int, default=8, help="CPU cores for tokenization"
-    )
-    parser.add_argument(
         "--dry_run", action="store_true", help="Preview dataset stats without training"
+    )
+    parser.add_argument(
+        "--interactive", action="store_true", help="Enable interactive configuration"
     )
     args = parser.parse_args()
 
-    if not os.path.isfile(args.dataset):
-        logging.error(f"Dataset file '{args.dataset}' does not exist.")
+    # -------------------------
+    # Dataset loading
+    # -------------------------
+    dataset = load_dataset_from_file(args.dataset)
+    if dataset is None or args.dry_run:
+        logging.info("Dry run: exiting after dataset preview")
         return
 
+    # -------------------------
+    # Model selection
+    # -------------------------
     base_model = select_model(
         interactive=(args.base_model is None), default_model=args.base_model
     )
 
-    # Unique per-model output directory
+    # -------------------------
+    # Output directory
+    # -------------------------
     model_safe_name = base_model.replace("/", "_")
     output_dir = os.path.join(args.output_dir, model_safe_name)
     os.makedirs(output_dir, exist_ok=True)
 
-    logging.info(f"Loading dataset from {args.dataset}...")
-    try:
-        dataset = load_dataset("json", data_files=args.dataset, split="train")
-    except Exception as e:
-        logging.error(f"Failed to load dataset: {e}")
-        return
+    # -------------------------
+    # LoRA & training configuration
+    # -------------------------
+    cfg = configure_lora(interactive=args.interactive)
 
-    logging.info(f"Dataset loaded: {len(dataset)} samples")
-    if args.dry_run:
-        logging.info("Dry run: exiting after dataset preview")
-        return
+    bnb_config = cfg["bnb_config"]
+    torch_dtype = cfg["torch_dtype"]
+    training_args_cfg = cfg["training_args"]
+    lora_args_cfg = cfg["lora_args"]
+    checkpoint_args_cfg = cfg["checkpoint_args"]
 
-    logging.info(f"Loading tokenizer and base model ({base_model})...")
-    tokenizer = AutoTokenizer.from_pretrained(base_model, use_auth_token=hf_token)
-    model = AutoModelForCausalLM.from_pretrained(
-        base_model, device_map="auto", load_in_8bit=True, use_auth_token=hf_token
-    )
-    model = prepare_model_for_kbit_training(model)
+    # -------------------------
+    # Tokenizer & model loading
+    # -------------------------
+    tokenizer, model = prepare_tokenizer_and_model(base_model, hf_token, bnb_config)
+    model = configure_lora_model(model, **lora_args_cfg)
 
-    logging.info("Configuring LoRA...")
-    lora_config = LoraConfig(
-        r=16,
-        lora_alpha=32,
-        target_modules=["q_proj", "v_proj"],
-        lora_dropout=0.1,
-        bias="none",
-        task_type="CAUSAL_LM",
-    )
-    model = get_peft_model(model, lora_config)
-
-    total_params = sum(p.numel() for p in model.parameters())
-    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    logging.info(
-        f"Total parameters: {total_params:,}, trainable (LoRA): {trainable_params:,}"
-    )
-
-    logging.info("Tokenizing dataset...")
-
-    def tokenize(examples):
-        return tokenizer(examples["text"], truncation=True, max_length=args.max_length)
-
+    # -------------------------
+    # Tokenize dataset
+    # -------------------------
     tokenized_dataset = get_tokenized_dataset(
         dataset,
         tokenizer,
         output_dir,
-        max_length=args.max_length,
-        num_proc=args.num_proc,
+        max_length=training_args_cfg.get("max_length", 1024),
+        num_proc=8,
     )
     tokenized_dataset.set_format(type="torch", columns=["input_ids"])
 
-    logging.info("Preparing training arguments...")
+    # -------------------------
+    # TrainingArguments setup
+    # -------------------------
     training_args = TrainingArguments(
         output_dir=output_dir,
-        per_device_train_batch_size=args.batch_size,
-        gradient_accumulation_steps=args.grad_accum,
-        num_train_epochs=args.epochs,
-        learning_rate=1e-4,
-        fp16=True,
-        save_total_limit=2,
+        per_device_train_batch_size=training_args_cfg["per_device_train_batch_size"],
+        gradient_accumulation_steps=training_args_cfg["gradient_accumulation_steps"],
+        num_train_epochs=training_args_cfg["num_train_epochs"],
+        learning_rate=training_args_cfg["learning_rate"],
+        fp16=training_args_cfg.get("fp16", False),
+        bf16=training_args_cfg.get("bf16", False),
+        save_strategy=checkpoint_args_cfg.get("save_strategy", "epoch"),
+        save_total_limit=checkpoint_args_cfg.get("save_total_limit", 2),
         logging_steps=10,
-        save_strategy="epoch",
         report_to="none",
     )
-    logging.info(f"Training arguments: {training_args}")
 
-    logging.info("Starting LoRA fine-tuning...")
+    # -------------------------
+    # Trainer initialization & training
+    # -------------------------
     trainer = Trainer(
         model=model,
         train_dataset=tokenized_dataset,
@@ -286,6 +464,7 @@ def main():
         callbacks=[GPUUsageCallback],
     )
 
+    logging.info("Starting LoRA fine-tuning...")
     try:
         trainer.train()
     except Exception as e:
