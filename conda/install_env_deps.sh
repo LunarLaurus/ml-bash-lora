@@ -169,12 +169,11 @@ install_lora_deps() {
 }
 
 remove_cpu_packages() {
-    local req_file="$1"
     local pkg
     local found_any=false
     
-    if [[ ! -f "$req_file" ]]; then
-        error "Requirements file not found: $req_file"
+    if [[ ! -f "$REQUIREMENTS_FILE" ]]; then
+        error "Requirements file not found: $REQUIREMENTS_FILE"
         return 1
     fi
     
@@ -203,7 +202,7 @@ remove_cpu_packages() {
                 ${PIP_CMD[@]} uninstall -y "$pkg" || warn "Failed to uninstall $pkg"
             fi
         fi
-    done < "$req_file"
+    done < "$REQUIREMENTS_FILE"
     
     if [[ "$found_any" == false ]]; then
         info "No CPU-only packages found."
