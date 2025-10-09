@@ -98,7 +98,10 @@ install_lora_deps() {
     TORCH_REPORTED="$($PYTHON_CMD -c 'import torch; v=getattr(torch.version,"cuda",None); print(v or "None")')"
     normalized_reported="$(printf '%s' "$TORCH_REPORTED" | sed -E 's/[^0-9.]//g' | grep -oE '^[0-9]+\.[0-9]+')"
     
-    expected_torch_ver="${CUIDX_TO_TORCH_VER[$(get_cu_index)]}"
+    local cuidx
+    cuidx="$(get_cu_index)"
+    local expected_torch_ver
+    expected_torch_ver="${CUIDX_TO_TORCH_VER[$cuidx]:-}"
     if [ "$normalized_reported" = "$expected_torch_ver" ]; then
         info "${GREEN}Success: Installed PyTorch matches CUDA $cuda_ver_num.${NC}"
     else
