@@ -16,7 +16,7 @@ env_disk_usage() {
     du -sh $HOME/miniforge/envs/* 2>/dev/null || echo -e "${YELLOW}No conda envs found or du failed.${NC}"
 }
 
-ensure_python_cmd || { echo -e "${RED}Python not found for active environment. Activate env first.${NC}"; return 1; }
+ensure_python_cmd || { echo -e "${RED}Python not found for active environment. Activate/Create an Env. first.${NC}"; }
 
 while true; do
     echo -e "\n${BCYAN}=== Conda / ML Environment Menu ===${NC}"
@@ -44,7 +44,7 @@ while true; do
     echo "    40) Run full setup (create+activate+all installs+validate)"
     echo
     echo -e "${BRED}0) Back to Main Menu${NC}"
-
+    
     read -rp "Choice: " choice
     case $choice in
         1) install_conda ;;             # top-level 0 to install conda (kept from previous menu)
