@@ -455,7 +455,7 @@ PY
     
     
     info "Checking dependencies..."
-    check_python_deps transformers datasets peft torch tqdm numpy scipy scikit-learn
+    check_python_deps transformers datasets peft torch tqdm numpy scipy sklearn
     if [ ${#MISSING_PY_DEPS[@]} -gt 0 ]; then
         echo -e "${BRED}Missing Python dependencies: ${MISSING_PY_DEPS[*]}${NC}"
         auto_install_python_deps || {
