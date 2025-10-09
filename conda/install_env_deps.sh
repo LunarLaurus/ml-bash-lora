@@ -82,7 +82,7 @@ install_lora_deps() {
     fi
     
     if [[ -z "${TORCH_INDEX_URL}" ]]; then
-        error "Torch Index Unset: $TORCH_INDEX_URL"
+        error "Torch Index not set, updating."
         update_torch_index_url
     fi
     
@@ -98,7 +98,7 @@ install_lora_deps() {
     TORCH_REPORTED="$($PYTHON_CMD -c 'import torch; v=getattr(torch.version,"cuda",None); print(v or "None")')"
     normalized_reported="$(printf '%s' "$TORCH_REPORTED" | sed -E 's/[^0-9.]//g' | grep -oE '^[0-9]+\.[0-9]+')"
     
-    expected_torch_ver="${CUIDX_TO_TORCH_VER[$cuidx]}"
+    expected_torch_ver="${CUIDX_TO_TORCH_VER[$(get_cu_index)]}"
     if [ "$normalized_reported" = "$expected_torch_ver" ]; then
         info "${GREEN}Success: Installed PyTorch matches CUDA $cuda_ver_num.${NC}"
     else
