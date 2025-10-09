@@ -1,6 +1,20 @@
 #!/bin/bash
 REQUIREMENTS_FILE="$SCRIPT_DIR/requirements.txt"
 
+# CUDA → Recommended PyTorch version mapping (Ubuntu, Python 3.10/3.11)
+# Validated for CUDA 11.x–12.9 and current PyTorch wheel availability
+declare -A CUIDX_TO_TORCH_VER=(
+    ["cu118"]="2.7"   # CUDA 11.8 → stable baseline (broadest support)
+    ["cu121"]="2.8"   # CUDA 12.1 → supported since 2.8
+    ["cu122"]="2.8"   # CUDA 12.2 → supported since 2.8
+    ["cu123"]="2.8"   # CUDA 12.3 → supported since 2.8
+    ["cu124"]="2.8"   # CUDA 12.4 → supported since 2.8
+    ["cu126"]="2.8"   # CUDA 12.6 → supported since 2.8
+    ["cu128"]="2.8"   # CUDA 12.8 → current stable (preferred for 2025 GPUs)
+    ["cu129"]="2.8"   # CUDA 12.9 → latest available index, 2.8 wheels exist
+    ["cu0"]=""        # CPU-only / unknown CUDA → fallback to CPU wheels
+)
+
 # ------------------------------
 # Step 4: Install/ensure PyTorch - uses current env python/pip only
 # ------------------------------
@@ -70,6 +84,31 @@ preflight_deps() {
     return 0
 }
 
+# Helper: return expected torch version for a given cuidx.
+# - normalises the cuidx
+# - falls back to "cu0" (CPU) for empty/invalid keys
+# - echoes the version (may be empty string for CPU)
+get_expected_torch_ver() {
+    local cuidx="$1"
+    # Default to cu0 if empty/null
+    if [[ -z "${cuidx:-}" ]]; then
+        cuidx="cu0"
+    fi
+    
+    # Normalize to lower-case (just in case)
+    cuidx="${cuidx,,}"
+    
+    # If key exists in the associative array, return its value
+    if [[ -v "CUIDX_TO_TORCH_VER[$cuidx]" ]]; then
+        printf '%s' "${CUIDX_TO_TORCH_VER[$cuidx]}"
+        return 0
+    fi
+    
+    # Unknown cuidx -> fallback to cu0
+    printf '%s' "${CUIDX_TO_TORCH_VER[cu0]}"
+    return 0
+}
+
 install_lora_deps() {
     info "${BBLUE}[install] Upgrading pip/setuptools/wheel...${NC}"
     
@@ -97,15 +136,14 @@ install_lora_deps() {
     # Validate installed torch
     TORCH_REPORTED="$($PYTHON_CMD -c 'import torch; v=getattr(torch.version,"cuda",None); print(v or "None")')"
     normalized_reported="$(printf '%s' "$TORCH_REPORTED" | sed -E 's/[^0-9.]//g' | grep -oE '^[0-9]+\.[0-9]+')"
-    
-    local cuidx
     cuidx="$(get_cu_index)"
-    local expected_torch_ver
-    expected_torch_ver="${CUIDX_TO_TORCH_VER[$cuidx]:-}"
-    if [ "$normalized_reported" = "$expected_torch_ver" ]; then
-        info "${GREEN}Success: Installed PyTorch matches CUDA $cuda_ver_num.${NC}"
+    expected_torch_ver="$(get_expected_torch_ver "$cuidx")"
+    expected_label="${expected_torch_ver:-cpu}"
+    
+    if [[ "${normalized_reported:-}" = "${expected_torch_ver}" ]]; then
+        info "${GREEN}Success: Installed PyTorch matches expected (${expected_label}) for CUDA index ${cuidx:-cu0}.${NC}"
     else
-        warn "${RED}Installed PyTorch reports CUDA $normalized_reported, expected $expected_torch_ver.${NC}"
+        warn "${RED}Mismatch: PyTorch reports '${normalized_reported:-cpu}', expected '${expected_label}' for CUDA index ${cuidx:-cu0}.${NC}"
     fi
     
     info "${BBLUE}[install] Dependency installation complete.${NC}"
