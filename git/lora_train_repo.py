@@ -165,7 +165,7 @@ def configure_quantization(interactive=True):
     }
     for k, v in options.items():
         print(f"{k}) {v}")
-
+    logging.info("Select model precision / quantization. Default: 8-Bit.")
     choice = input("Enter 1-5 [skip]: ").strip()
     bnb_config = None
     torch_dtype = None
@@ -199,7 +199,10 @@ def configure_memory(interactive=True):
     """
     if not interactive:
         return None
-    val = input("Max GPU memory per device (e.g., '80%' or '8GB') [skip]: ").strip()
+    logging.info(
+        "Set the maximum GPU memory per device. Example: '80%' or '8GB'. Default: skip for auto."
+    )
+    val = input("Max GPU memory per device [skip]: ").strip()
     return {"0": val} if val else None
 
 
@@ -212,11 +215,30 @@ def configure_training_args(interactive=True):
         return None
 
     print("\nTraining hyperparameters (press Enter to skip any)")
-    batch_size = input("Batch size per device: ").strip()
-    grad_accum = input("Gradient accumulation steps: ").strip()
-    max_length = input("Max sequence length (tokens): ").strip()
-    epochs = input("Number of training epochs: ").strip()
-    learning_rate = input("Learning rate: ").strip()
+    logging.info(
+        "Batch size per device: Number of samples processed simultaneously on each GPU. Default=1"
+    )
+    batch_size = input("Batch size per device (default 1): ").strip()
+
+    logging.info(
+        "Gradient accumulation steps: Number of steps to accumulate gradients before updating weights. Useful for simulating larger batch sizes. Default=4"
+    )
+    grad_accum = input("Gradient accumulation steps (default 4): ").strip()
+
+    logging.info(
+        "Max sequence length (tokens): Maximum number of tokens per training sample. Longer sequences use more memory. Default=1024"
+    )
+    max_length = input("Max sequence length in tokens (default 1024): ").strip()
+
+    logging.info(
+        "Number of training epochs: How many times the model will iterate over the entire dataset. Default=3"
+    )
+    epochs = input("Number of training epochs (default 3): ").strip()
+
+    logging.info(
+        "Learning rate: Step size for optimizer updates. Too high can destabilize training, too low slows convergence. Default=1e-4"
+    )
+    learning_rate = input("Learning rate (default 1e-4): ").strip()
 
     args = {}
     if batch_size:
@@ -242,10 +264,27 @@ def configure_lora_args(interactive=True):
         return None
 
     print("\nLoRA hyperparameters (press Enter to skip any)")
-    r = input("LoRA rank r: ").strip()
-    alpha = input("LoRA alpha: ").strip()
-    dropout = input("LoRA dropout: ").strip()
-    target_modules = input("Target modules (comma-separated): ").strip()
+    logging.info(
+        "LoRA rank r: Dimensionality of the low-rank decomposition for LoRA. Higher r = more capacity, more memory. Default=16"
+    )
+    r = input("LoRA rank r (default 16): ").strip()
+
+    logging.info(
+        "LoRA alpha: Scaling factor for LoRA updates. Higher alpha increases adaptation strength. Default=32"
+    )
+    alpha = input("LoRA alpha (default 32): ").strip()
+
+    logging.info(
+        "LoRA dropout: Dropout probability applied to LoRA layers. Helps regularize training. Default=0.1"
+    )
+    dropout = input("LoRA dropout (default 0.1): ").strip()
+
+    logging.info(
+        "Target modules: Comma-separated list of model modules to apply LoRA to (e.g., 'q_proj,v_proj'). Default='q_proj,v_proj'"
+    )
+    target_modules = input(
+        "Target modules (comma-separated, default 'q_proj,v_proj'): "
+    ).strip()
 
     args = {}
     if r:
@@ -273,8 +312,17 @@ def configure_checkpoint_args(interactive=True):
         return None
 
     print("\nCheckpointing options (press Enter to skip any)")
-    save_strategy = input("Save strategy (epoch/steps): ").strip()
-    save_total_limit = input("Number of checkpoints to keep: ").strip()
+    logging.info(
+        "Save strategy: How often to save model checkpoints. 'epoch' = save after each epoch, 'steps' = save every N steps. Default='epoch'"
+    )
+    save_strategy = input(
+        "Save strategy ('epoch' or 'steps', default 'epoch'): "
+    ).strip()
+
+    logging.info(
+        "Number of checkpoints to keep: Limits how many past checkpoints are retained to save disk space. Default=2"
+    )
+    save_total_limit = input("Number of checkpoints to keep (default 2): ").strip()
 
     args = {}
     if save_strategy:
