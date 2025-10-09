@@ -505,7 +505,9 @@ def configure_lora(interactive=True):
     return cfg
 
 
-def get_tokenized_dataset(dataset, tokenizer, output_dir, max_length, num_proc):
+def get_tokenized_dataset(
+    dataset, tokenizer, output_dir, max_length, num_proc, model=None
+):
     cache_file = Path(output_dir) / "tokenized_dataset.arrow"
 
     if cache_file.exists():
@@ -516,13 +518,43 @@ def get_tokenized_dataset(dataset, tokenizer, output_dir, max_length, num_proc):
     else:
         logging.info("Tokenizing dataset...")
 
+        is_seq2seq = getattr(model.config, "is_encoder_decoder", False)
+
         def tokenize(examples):
-            return tokenizer(examples["text"], truncation=True, max_length=max_length)
+            if is_seq2seq:
+                # Expect dataset to have 'input' and 'target' — modify field names if needed
+                inputs = tokenizer(
+                    examples["input"], truncation=True, max_length=max_length
+                )
+                targets = tokenizer(
+                    examples["target"], truncation=True, max_length=max_length
+                )
+                inputs["labels"] = targets["input_ids"]
+                return inputs
+            else:
+                toks = tokenizer(
+                    examples["text"], truncation=True, max_length=max_length
+                )
+                pad_id = tokenizer.pad_token_id
+                labels = []
+                if pad_id is None:
+                    # no pad token set: just copy input_ids
+                    labels = [seq.copy() for seq in toks["input_ids"]]
+                else:
+                    # replace pad token id with -100 so loss ignores padded positions
+                    for seq in toks["input_ids"]:
+                        labels.append([tok if tok != pad_id else -100 for tok in seq])
+                toks["labels"] = labels
+                return toks
 
         tokenized_dataset = dataset.map(
             tokenize, batched=True, num_proc=num_proc, desc="Tokenizing"
         )
-        tokenized_dataset.set_format(type="torch", columns=["input_ids"])
+
+        # Ensure torch format includes labels
+        tokenized_dataset.set_format(
+            type="torch", columns=["input_ids", "attention_mask", "labels"]
+        )
         tokenized_dataset.save_to_disk(cache_file)
         logging.info(f"Tokenized dataset cached at: {cache_file}")
 
@@ -696,6 +728,7 @@ def main():
         output_dir,
         max_length=training_args_cfg.get("max_length", 1024),
         num_proc=8,
+        model=model,
     )
     tokenized_dataset.set_format(type="torch", columns=["input_ids"])
 
