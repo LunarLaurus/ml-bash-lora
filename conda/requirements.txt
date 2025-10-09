@@ -4,6 +4,8 @@ torchvision>=0.23.0
 torchaudio>=2.8.0
 bitsandbytes>=0.48
 transformers>=4.56.2
+scipy>=1.16.1
+scikit-learn>=1.7.0
 peft>=0.17.1
 accelerate
 datasets
