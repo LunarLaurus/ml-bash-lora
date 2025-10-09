@@ -188,16 +188,15 @@ remove_cpu_packages() {
         pkg=$(echo "$line" | sed -E 's/([<>=!~].*)//; s/\s+//g')
         
         
+        
         # Check if the package is installed
         if "$PYTHON_CMD" -c "
-            try:
-                __import__('$pkg')
-            except ImportError:
-                import sys
-                sys.exit(1)
+try:
+    __import__('$pkg')
+except ImportError:
+    import sys
+    sys.exit(1)
         "; then
-            ...
-            
             # Check if it’s a CPU-only version
             cpu_only=false
             if [[ "$pkg" == "torch" || "$pkg" == "torchvision" || "$pkg" == "torchaudio" ]]; then
