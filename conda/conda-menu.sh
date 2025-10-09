@@ -36,6 +36,8 @@ while true; do
     echo "    25) Validate environment"
     echo "    26) List packages in current environment"
     echo "    27) Remove package(s) from current environment"
+    echo "    28) List LoRA lib versions (in active conda env)"
+    echo "    29) List RAG lib versions (in active conda env)"
     echo
     echo "30) Management"
     echo "    31) Switch active ML environment"
@@ -61,6 +63,8 @@ while true; do
         25) validate_env ;;
         26) list_installed_packages ;;
         27) remove_user_packages ;;
+        28) list_lora_lib_versions ;;
+        29) list_rag_lib_versions ;;
         31) switch_env ;;
         32) remove_ml_env ;;
         33) show_python_version ;;

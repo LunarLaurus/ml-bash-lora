@@ -211,3 +211,52 @@ PYCODE
     
     info "${BCYAN}[verify] Dependency verification complete.${NC}"
 }
+
+
+
+# ------------------------------
+# List LoRA / RAG packages (conda env only)
+# ------------------------------
+list_lora_lib_versions() {
+    if ! get_active_env; then
+        error_no_env
+        return 1
+    fi
+    echo -e "${BCYAN}LoRA-related package versions in '$CURRENT_ENV':${NC}"
+    ensure_python_cmd || { echo -e "${RED}Python not found.${NC}"; return 1; }
+    
+    "$PYTHON_CMD" - <<PY
+import importlib
+pkgs = ["transformers","peft","bitsandbytes","accelerate","datasets","safetensors"]
+for p in pkgs:
+    try:
+        m = importlib.import_module(p)
+        v = getattr(m, "__version__", None) or getattr(m, "version", None) or "unknown"
+        print(f"{p}: {v}")
+    except Exception as e:
+        print(f"{p}: NOT INSTALLED ({e.__class__.__name__})")
+PY
+}
+
+list_rag_lib_versions() {
+    if ! get_active_env; then
+        error_no_env
+        return 1
+    fi
+    echo -e "${BCYAN}RAG-related package versions in '$CURRENT_ENV':${NC}"
+    ensure_python_cmd || { echo -e "${RED}Python not found.${NC}"; return 1; }
+    
+    "$PYTHON_CMD" - <<PY
+import importlib
+pkgs = ["faiss","faiss_cpu","sentence_transformers","langchain","sentencepiece"]
+# normalize import names
+for p in pkgs:
+    key = p.replace("-", "_")
+    try:
+        m = importlib.import_module(key)
+        v = getattr(m, "__version__", None) or getattr(m, "version", None) or "unknown"
+        print(f"{p}: {v}")
+    except Exception as e:
+        print(f"{p}: NOT INSTALLED ({e.__class__.__name__})")
+PY
+}

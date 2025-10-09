@@ -89,12 +89,12 @@ find_large_projects() {
     root="${1:-$HOME}"
     depth="${2:-2}"
     topn="${3:-20}"
-
+    
     if [ ! -d "$root" ]; then
         echo -e "${RED}Root path '$root' does not exist.${NC}"
         return 1
     fi
-
+    
     echo -e "${GREEN}Scanning for largest directories under: $root (depth=$depth)${NC}"
     tmpfile=$(mktemp)
     ( cd "$root" && du -B1 -d "$depth" 2>/dev/null ) >"$tmpfile"
@@ -104,62 +104,15 @@ find_large_projects() {
         return 1
     fi
     sort -nr "$tmpfile" | head -n "$topn" | awk '{ printf "%12s  %s\n", $1, $2 }' | \
-        while read -r bytes path; do
-            if command -v numfmt &>/dev/null; then
-                h=$(numfmt --to=iec --suffix=B "$bytes")
-            else
-                h="$bytes"
-            fi
-            echo -e "${GREEN}$h${NC}  $root/$path"
-        done
+    while read -r bytes path; do
+        if command -v numfmt &>/dev/null; then
+            h=$(numfmt --to=iec --suffix=B "$bytes")
+        else
+            h="$bytes"
+        fi
+        echo -e "${GREEN}$h${NC}  $root/$path"
+    done
     rm -f "$tmpfile"
-}
-
-# ------------------------------
-# List LoRA / RAG packages (conda env only)
-# ------------------------------
-list_lora_lib_versions() {
-    if ! get_active_env; then
-        error_no_env
-        return 1
-    fi
-    echo -e "${BCYAN}LoRA-related package versions in '$CURRENT_ENV':${NC}"
-    ensure_python_cmd || { echo -e "${RED}Python not found.${NC}"; return 1; }
-
-    "$PYTHON_CMD" - <<PY
-import importlib
-pkgs = ["transformers","peft","bitsandbytes","accelerate","datasets","safetensors"]
-for p in pkgs:
-    try:
-        m = importlib.import_module(p)
-        v = getattr(m, "__version__", None) or getattr(m, "version", None) or "unknown"
-        print(f"{p}: {v}")
-    except Exception as e:
-        print(f"{p}: NOT INSTALLED ({e.__class__.__name__})")
-PY
-}
-
-list_rag_lib_versions() {
-    if ! get_active_env; then
-        error_no_env
-        return 1
-    fi
-    echo -e "${BCYAN}RAG-related package versions in '$CURRENT_ENV':${NC}"
-    ensure_python_cmd || { echo -e "${RED}Python not found.${NC}"; return 1; }
-
-    "$PYTHON_CMD" - <<PY
-import importlib
-pkgs = ["faiss","faiss_cpu","sentence_transformers","langchain","sentencepiece"]
-# normalize import names
-for p in pkgs:
-    key = p.replace("-", "_")
-    try:
-        m = importlib.import_module(key)
-        v = getattr(m, "__version__", None) or getattr(m, "version", None) or "unknown"
-        print(f"{p}: {v}")
-    except Exception as e:
-        print(f"{p}: NOT INSTALLED ({e.__class__.__name__})")
-PY
 }
 
 # ------------------------------
@@ -184,10 +137,8 @@ while true; do
     echo "32) Install pip utilities (humanize, regex)"
     echo "---- Other ----"
     echo "40) Find largest projects/directories"
-    echo "50) List LoRA lib versions (in active conda env)"
-    echo "51) List RAG lib versions (in active conda env)"
     echo -e "${BRED}0) Back to Main Menu${NC}"
-
+    
     read -rp "Choice: " choice
     case $choice in
         10) install_apt_single git ;;
@@ -195,16 +146,16 @@ while true; do
         12) install_apt_group "Download tools" curl wget ;;
         13) install_apt_single ffmpeg ;;
         14) install_apt_single build-essential ;;
-
+        
         20) install_group_essentials ;;
         21) install_group_devtools ;;
         22) install_group_media ;;
         23) install_group_utils ;;
-
+        
         30) pip_group_text_processing ;;
         31) pip_group_monitoring ;;
         32) pip_group_utils ;;
-
+        
         40)
             read -rp "Path to scan (default: $HOME): " scanroot
             scanroot=${scanroot:-$HOME}
@@ -213,10 +164,8 @@ while true; do
             read -rp "How many results to show (default: 20): " topn
             topn=${topn:-20}
             find_large_projects "$scanroot" "$depth" "$topn"
-            ;;
-        50) list_lora_lib_versions ;;
-        51) list_rag_lib_versions ;;
-
+        ;;
+        
         0) break ;;
         *) echo -e "${RED}Invalid option${NC}" ;;
     esac
