@@ -362,12 +362,12 @@ def load_dataset_from_file(dataset_path):
 
 def prepare_tokenizer_and_model(base_model, hf_token, bnb_config=None):
     logging.info(f"Loading tokenizer and base model ({base_model})...")
-    tokenizer = AutoTokenizer.from_pretrained(base_model, use_auth_token=hf_token)
+    tokenizer = AutoTokenizer.from_pretrained(base_model, token=hf_token)
     model = AutoModelForCausalLM.from_pretrained(
         base_model,
         device_map="auto",
         quantization_config=bnb_config,
-        use_auth_token=hf_token,
+        token=hf_token,
     )
     model = prepare_model_for_kbit_training(model)
     return tokenizer, model
