@@ -436,7 +436,7 @@ def configure_checkpoint_args(interactive=True):
     """
     Returns a dictionary of checkpoint args or None if skipped.
     """
-    defaults = {"save_strategy": "best", "save_total_limit": 5}
+    defaults = {"save_strategy": "epoch", "save_total_limit": 5}
     if not interactive:
         return defaults.copy()
 
