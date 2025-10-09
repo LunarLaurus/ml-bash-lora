@@ -358,16 +358,14 @@ def configure_lora_args(interactive=True):
     )
     bias = input(f"Bias (default {defaults['bias']}): ").strip()
 
-    logging.info("Overview of types of tasks supported by PEFT: ")
     logging.info(
-        "   SEQ_CLS: Text classification. \n\
+        "Overview of types of tasks supported by PEFT:\n\
+            SEQ_CLS: Text classification. \n\
             SEQ_2_SEQ_LM: Sequence-to-sequence language modeling. \n\
-            CAUSAL_LM: Causal language modeling. "
-    )
-    logging.info(
-        "   TOKEN_CLS: Token classification. \n\
+            CAUSAL_LM: Causal language modeling. \n\
+            TOKEN_CLS: Token classification. \n\
             QUESTION_ANS: Question answering. \n\
-            FEATURE_EXTRACTION: Feature extraction. Provides the hidden states which can be used as embeddings or features for downstream tasks. "
+            FEATURE_EXTRACTION: Feature extraction, Provides the hidden states for downstream tasks. "
     )
     task_type = input(f"Task Type (default {defaults['task_type']}): ").strip()
 
@@ -408,7 +406,9 @@ def configure_checkpoint_args(interactive=True):
             best: Save is done whenever a new best_metric is achieved. \n\
             (default {defaults['save_strategy']})"
     )
-    save_strategy = input(f"Save strategy (default {defaults['bias']}): ").strip()
+    save_strategy = input(
+        f"Save strategy (default {defaults['save_strategy']}): "
+    ).strip()
 
     logging.info(
         "Number of checkpoints to keep: Limits how many past checkpoints are retained to save disk space."
