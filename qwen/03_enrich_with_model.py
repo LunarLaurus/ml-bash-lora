@@ -30,12 +30,19 @@ import textwrap
 FUNCTIONS_PARSED = Path("data/parsed_functions.jsonl")
 GRAPH_FUNCTIONS = Path("data/dep_graph_functions.jsonl")
 ENRICHED_OUTPUT = Path("data/enriched_functions.jsonl")
-
 MAX_TOKENS = 512
 BATCH_SIZE = 32
+
+
+# ------------------------- etc -------------------------
 _input_queue = queue.Queue(maxsize=BATCH_SIZE * 2)
 _output_queue = queue.Queue(maxsize=BATCH_SIZE * 2)
 _shutdown = threading.Event()
+
+# ------------------------- module-level vars -------------------------
+TOKENIZER = None
+MODEL = None
+PIPELINE = None
 
 # ------------------------- heuristics -------------------------
 CALL_SITE_REGEX = re.compile(r"\b([A-Za-z_]\w*)\s*\(")
@@ -97,40 +104,39 @@ def get_device():
 
 
 def load_model():
+    global TOKENIZER, MODEL, PIPELINE
+
     device = get_device()
     logging.info("Initializing model load on device %s...", device)
 
     logging.info("Loading tokenizer for Salesforce/codet5-small...")
-    tokenizer = AutoTokenizer.from_pretrained("Salesforce/codet5-small")
+    TOKENIZER = AutoTokenizer.from_pretrained("Salesforce/codet5-small")
     logging.info("Tokenizer loaded successfully.")
 
     logging.info(
         "Loading model weights for Salesforce/codet5-small on device %s...", device
     )
-    model = AutoModelForSeq2SeqLM.from_pretrained("Salesforce/codet5-small").to(device)
+    MODEL = AutoModelForSeq2SeqLM.from_pretrained("Salesforce/codet5-small").to(device)
     logging.info("Model weights loaded successfully.")
 
     logging.info("Creating pipeline...")
     device_index = 0 if torch.cuda.is_available() else -1
-    pipe = pipeline(
+    PIPELINE = pipeline(
         "text2text-generation",
-        model=model,
-        tokenizer=tokenizer,
+        model=MODEL,
+        tokenizer=TOKENIZER,
         device=device_index,
         max_new_tokens=MAX_TOKENS,
     )
     logging.info("Pipeline created. Model ready for inference.")
-    return pipe, tokenizer
 
 
-def chunk_text(text: str, tokenizer=None, max_tokens: int = MAX_TOKENS) -> str:
-    if tokenizer:
-        tokens = tokenizer.encode(text, truncation=True, max_length=max_tokens)
-        return tokenizer.decode(tokens)
-    words = text.split()
-    if len(words) <= max_tokens:
-        return text
-    return " ".join(words[:max_tokens])
+def chunk_text(text: str, max_tokens: int = MAX_TOKENS) -> str:
+    """
+    Truncate text to fit max_tokens using the global tokenizer.
+    """
+    tokens = TOKENIZER.encode(text, truncation=True, max_length=max_tokens)
+    return TOKENIZER.decode(tokens, skip_special_tokens=True)
 
 
 def model_prompt_function(fn_entry: dict) -> str:
