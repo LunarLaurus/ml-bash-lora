@@ -76,7 +76,8 @@ install_dependencies() {
 # -------------------------
 run_script() {
     local script_path="$1"
-    local expected_input="$2"
+    local expected_input="${2-}"
+    
     shift
     if [ -n "$expected_input" ]; then
         shift  # only shift $2 if it exists
