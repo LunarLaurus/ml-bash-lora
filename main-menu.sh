@@ -21,7 +21,7 @@ while true; do
         2) source ./cuda/cuda-menu.sh ;;
         3) source ./conda/conda-menu.sh ;;
         4) source ./git/git-menu.sh ;;
-        5) source ./utils/qwen-menu.sh ;;
+        5) source ./qwen/qwen-menu.sh ;;
         6) source ./diagnostics/diagnostics-menu.sh ;;
         7) source ./utils/utils-menu.sh ;;
         0) echo "Exiting."; exit 0 ;;
