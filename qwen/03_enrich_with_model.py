@@ -151,9 +151,7 @@ def run_model(pipe, prompt: str) -> dict:
     """
     try:
         # Wrap in a list for pipeline, truncate internally too
-        output = pipe([prompt], truncation=True, max_length=MAX_TOKENS)[0][
-            "generated_text"
-        ]
+        output = pipe([prompt], truncation=True)[0]["generated_text"]
         return json.loads(output)
     except Exception:
         return {
