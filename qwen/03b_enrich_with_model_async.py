@@ -9,25 +9,41 @@ Enrich function-level and file-level JSONL for LoRA training.
 - Groups functions per file to build file-level summaries
 - Uses Salesforce/codet5-small for model-based summarization
 - Outputs a single enriched JSONL
-- Sequential, no async or batching
+- Async batching on GPU with full FP32
+- Ctrl+C safe
 """
 
 import json
 import sys
+import threading
+import queue
 import logging
 from pathlib import Path
 from datetime import datetime
 import re
-import textwrap
 from tqdm import tqdm
 import torch
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
+import textwrap
 
 # ------------------------- config -------------------------
 INPUT_FUNCTIONS_PATH = Path("data/parsed_functions.jsonl")
 INPUT_GRAPH_FUNCTIONS_PATH = Path("data/dep_graph_functions.jsonl")
 OUTPUT_PATH = Path("data/enriched_functions.jsonl")
 MAX_TOKENS = 512
+BATCH_SIZE = 1
+
+
+# ------------------------- etc -------------------------
+_input_queue = queue.Queue(maxsize=BATCH_SIZE * 4)
+_output_queue = queue.Queue(maxsize=BATCH_SIZE * 4)
+_shutdown = threading.Event()
+PIPELINE_LOCK = threading.Lock()
+
+# ------------------------- module-level vars -------------------------
+TOKENIZER = None
+MODEL = None
+PIPELINE = None
 
 # ------------------------- heuristics -------------------------
 CALL_SITE_REGEX = re.compile(r"\b([A-Za-z_]\w*)\s*\(")
@@ -89,31 +105,45 @@ def get_device():
 
 
 def load_model():
+    global TOKENIZER, MODEL, PIPELINE
+
     device = get_device()
-    logging.info("Loading Salesforce/codet5-small model on device %s...", device)
-    tokenizer = AutoTokenizer.from_pretrained("Salesforce/codet5-small")
-    model = AutoModelForSeq2SeqLM.from_pretrained("Salesforce/codet5-small").to(device)
+    logging.info("Initializing model load on device %s...", device)
+
+    logging.info("Loading tokenizer for Salesforce/codet5-small...")
+    TOKENIZER = AutoTokenizer.from_pretrained("Salesforce/codet5-small")
+    logging.info("Tokenizer loaded successfully.")
+
+    logging.info(
+        "Loading model weights for Salesforce/codet5-small on device %s...", device
+    )
+    MODEL = AutoModelForSeq2SeqLM.from_pretrained("Salesforce/codet5-small").to(device)
+    logging.info("Model weights loaded successfully.")
+
+    logging.info("Creating pipeline...")
     device_index = 0 if torch.cuda.is_available() else -1
-    pipe = pipeline(
+    PIPELINE = pipeline(
         "text2text-generation",
-        model=model,
-        tokenizer=tokenizer,
+        model=MODEL,
+        tokenizer=TOKENIZER,
         device=device_index,
         max_new_tokens=MAX_TOKENS,
     )
-    logging.info("Model loaded and pipeline created.")
-    return pipe
+    logging.info("Pipeline created. Model ready for inference.")
 
 
-def chunk_text(text: str, tokenizer, max_tokens: int = MAX_TOKENS) -> str:
-    tokens = tokenizer.encode(text, truncation=True, max_length=max_tokens)
-    return tokenizer.decode(tokens, skip_special_tokens=True)
+def chunk_text(text: str, max_tokens: int = MAX_TOKENS) -> str:
+    """
+    Truncate text to fit max_tokens using the global tokenizer.
+    """
+    tokens = TOKENIZER.encode(text, truncation=True, max_length=max_tokens)
+    return TOKENIZER.decode(tokens, skip_special_tokens=True)
 
 
-def model_prompt_function(fn_entry: dict, tokenizer) -> str:
+def model_prompt_function(fn_entry: dict) -> str:
     fn = fn_entry.get("function", {})
     suffix = Path(fn_entry.get("file_path", "")).suffix.lower()
-    body = chunk_text(fn.get("body") or "", tokenizer)
+    body = chunk_text(fn.get("body") or "")
     signature = fn.get("signature") or ""
     return textwrap.dedent(
         f"""\
@@ -143,22 +173,87 @@ def model_prompt_file(file_path: str, fn_entries: list) -> str:
     )
 
 
-def run_model(pipe, prompt: str) -> dict:
-    try:
-        output = pipe(prompt)[0]["generated_text"]
-        return json.loads(output)
-    except Exception:
-        return {
-            "summary": output if "output" in locals() else "",
-            "intent_tags": [],
-            "risk_notes": "",
-            "change_recipe": "",
-            "confidence": 0.6,
-        }
+def batch_run_model(pipe, prompts: list) -> list:
+    results = []
+    for i in range(0, len(prompts), BATCH_SIZE):
+        batch = prompts[i : i + BATCH_SIZE]
+        logging.info("Sending batch of %d prompts to GPU.", len(batch))
+        try:
+            with PIPELINE_LOCK:
+                outputs = pipe(batch)
+        except Exception as e:
+            logging.error("Pipeline batch failed: %s", e)
+            outputs = [{"generated_text": ""}] * len(batch)
+        for out in outputs:
+            text = out.get("generated_text", "")
+            try:
+                data = json.loads(text)
+            except json.JSONDecodeError:
+                logging.warning("Failed to parse model output: %s", text)
+                data = {
+                    "summary": text,
+                    "intent_tags": [],
+                    "risk_notes": "",
+                    "change_recipe": "",
+                    "confidence": 0.6,
+                }
+            results.append(data)
+    return results
 
 
-# ------------------------- main enrichment -------------------------
-def enrich_functions(parsed_path: Path, output_path: Path, dep_graph: dict, pipe):
+# ------------------------- async GPU worker -------------------------
+def gpu_worker(pipe):
+    """Continuously process prompts from _input_queue in batches."""
+    while True:
+        if _shutdown.is_set() and _input_queue.empty():
+            break
+        batch = []
+        entries = []
+        while len(batch) < BATCH_SIZE:
+            try:
+                entry, prompt = _input_queue.get(timeout=0.5)
+                batch.append(prompt)
+                entries.append(entry)
+                _input_queue.task_done()
+            except queue.Empty:
+                break
+        if not batch:
+            continue
+
+        batch_results = batch_run_model(pipe, batch)
+        for entry, res in zip(entries, batch_results):
+            entry["summary"] = res.get("summary", "")
+            entry["change_recipe"] = res.get("change_recipe", "")
+            entry["confidence_score"] = float(res.get("confidence", 0.6))
+            entry["generated_at"] = datetime.utcnow().isoformat() + "Z"
+            _output_queue.put(entry)
+        logging.info("GPU worker processed batch of %d entries.", len(batch))
+
+
+# ------------------------- writer thread -------------------------
+def writer_thread(output_path: Path, q: "queue.Queue[dict]"):
+    tmp_path = output_path.with_suffix(output_path.suffix + ".tmp")
+    tmp_path.parent.mkdir(parents=True, exist_ok=True)
+    written = 0
+    while True:
+        try:
+            item = q.get(timeout=0.5)
+        except queue.Empty:
+            if _shutdown.is_set() and q.empty():
+                break
+            continue
+        if item is None:
+            break
+        with tmp_path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(item, ensure_ascii=False) + "\n")
+        written += 1
+        q.task_done()
+    tmp_path.replace(output_path)
+    logging.info("Wrote %d entries to %s", written, output_path)
+
+
+# ------------------------- main async enrichment -------------------------
+def enrich_functions_async(parsed_path: Path, output_path: Path, dep_graph: dict, pipe):
     logging.info("Loading function entries from %s...", parsed_path)
     entries = [
         json.loads(l) for l in parsed_path.read_text(encoding="utf-8").splitlines() if l
@@ -170,9 +265,16 @@ def enrich_functions(parsed_path: Path, output_path: Path, dep_graph: dict, pipe
         file_path = entry["file_path"]
         files_map.setdefault(file_path, []).append(entry)
 
-    enriched_entries = []
+    gpu_thread = threading.Thread(target=gpu_worker, args=(pipe,), daemon=True)
+    gpu_thread.start()
 
-    for entry in tqdm(entries, desc="Functions"):
+    writer = threading.Thread(
+        target=writer_thread, args=(output_path, _output_queue), daemon=True
+    )
+    writer.start()
+
+    # Fill input queue with per-function prompts and enrich heuristics
+    for entry in entries:
         fn = entry.get("function", {})
         body = fn.get("body") or ""
         suffix = Path(entry.get("file_path", "")).suffix.lower()
@@ -190,21 +292,21 @@ def enrich_functions(parsed_path: Path, output_path: Path, dep_graph: dict, pipe
             "graph_distance", {"to_entry_points": None}
         )
 
-        prompt = model_prompt_function(entry, pipe.tokenizer)
-        res = run_model(pipe, prompt)
-        entry["summary"] = res.get("summary", "")
-        entry["change_recipe"] = res.get("change_recipe", "")
-        entry["confidence_score"] = float(res.get("confidence", 0.6))
-        entry["generated_at"] = datetime.utcnow().isoformat() + "Z"
+        prompt = model_prompt_function(entry)
+        _input_queue.put((entry, prompt))
 
-        enriched_entries.append(entry)
+    logging.info("All function prompts enqueued. Waiting for GPU worker to finish...")
+    _input_queue.join()
+    _shutdown.set()
+    gpu_thread.join()
 
-    # File-level summaries
+    logging.info("Processing file-level summaries...")
     for file_path, fn_entries in tqdm(
         files_map.items(), total=len(files_map), desc="Files"
     ):
         file_prompt = model_prompt_file(file_path, fn_entries)
-        file_res = run_model(pipe, file_prompt)
+        file_res = batch_run_model(pipe, [file_prompt])[0]
+
         file_entry = {
             "id": f"file:{file_path}",
             "repo": str(Path.cwd().name),
@@ -223,19 +325,11 @@ def enrich_functions(parsed_path: Path, output_path: Path, dep_graph: dict, pipe
             "generated_at": datetime.utcnow().isoformat() + "Z",
             "functions": [fn.get("id") for fn in fn_entries],
         }
-        enriched_entries.append(file_entry)
+        _output_queue.put(file_entry)
 
-    # Write all entries to output
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with output_path.open("w", encoding="utf-8") as f:
-        for entry in enriched_entries:
-            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-
-    logging.info(
-        "Enrichment completed. Wrote %d entries to %s",
-        len(enriched_entries),
-        output_path,
-    )
+    _output_queue.put(None)
+    writer.join()
+    logging.info("Enrichment completed successfully.")
 
 
 # ------------------------- main -------------------------
@@ -264,7 +358,6 @@ def main():
         sys.exit(1)
 
     rel_output_path = repo_dir / OUTPUT_PATH
-
     dep_graph = {}
     with rel_input_graph_path.open("r", encoding="utf-8") as f:
         for line in f:
@@ -279,10 +372,14 @@ def main():
                 logging.warning("Skipped dep_graph entry without 'id': %s", obj)
 
     try:
-        pipe = load_model()
-        enrich_functions(rel_input_func_path, rel_output_path, dep_graph, pipe)
+        load_model()
+        enrich_functions_async(
+            rel_input_func_path, rel_output_path, dep_graph, PIPELINE
+        )
     except KeyboardInterrupt:
-        logging.warning("KeyboardInterrupt received! Exiting gracefully.")
+        logging.warning("KeyboardInterrupt received! Shutting down...")
+        _shutdown.set()
+        _output_queue.put(None)
 
 
 if __name__ == "__main__":
