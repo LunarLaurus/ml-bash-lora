@@ -31,12 +31,12 @@ INPUT_FUNCTIONS_PATH = Path("data/parsed_functions.jsonl")
 INPUT_GRAPH_FUNCTIONS_PATH = Path("data/dep_graph_functions.jsonl")
 OUTPUT_PATH = Path("data/enriched_functions.jsonl")
 MAX_TOKENS = 512
-BATCH_SIZE = 32
+BATCH_SIZE = 1
 
 
 # ------------------------- etc -------------------------
-_input_queue = queue.Queue(maxsize=BATCH_SIZE * 2)
-_output_queue = queue.Queue(maxsize=BATCH_SIZE * 2)
+_input_queue = queue.Queue(maxsize=BATCH_SIZE * 4)
+_output_queue = queue.Queue(maxsize=BATCH_SIZE * 4)
 _shutdown = threading.Event()
 PIPELINE_LOCK = threading.Lock()
 
