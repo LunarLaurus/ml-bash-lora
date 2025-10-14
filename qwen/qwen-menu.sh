@@ -10,109 +10,53 @@ source "$PROJECT_ROOT/git/git_utils.sh"
 source "$PROJECT_ROOT/git/python_utils.sh"
 
 # -------------------------
-# Globals
+# Globals & safe defaults for colors
 # -------------------------
 CURRENT_REPO_PATH=""
 DATA_DIR="data"
 
 # -------------------------
-# Check repo selected
+# Helpers (reduced duplication)
 # -------------------------
 current_repo_path_check() {
-    if [ -z "$CURRENT_REPO_PATH" ]; then
+    if [ -z "${CURRENT_REPO_PATH:-}" ]; then
         error "No repository selected. Please select a repository first."
         return 1
     fi
+    return 0
 }
 
-# -------------------------
-# Ensure data dir exists
-# -------------------------
 ensure_repo_data_dir() {
-    if ! current_repo_path_check; then return 1; fi
+    current_repo_path_check || return 1
     local dir="$CURRENT_REPO_PATH/$DATA_DIR"
     mkdir -p "$dir"
 }
 
-# -------------------------
-# Cleanup repo-specific JSONL
-# -------------------------
-cleanup_jsonl() {
-    ensure_repo_data_dir
-    warn "Removing all .jsonl files in $CURRENT_REPO_PATH/$DATA_DIR ..."
-    find "$CURRENT_REPO_PATH/$DATA_DIR" -type f -name "*.jsonl" -exec rm -f {} +
-    info "Done."
+# silent boolean: does file exist under current repo data dir?
+file_exists() {
+    local file="${1:-}"
+    [ -n "${CURRENT_REPO_PATH:-}" ] || return 1
+    [ -n "$file" ] || return 1
+    [ -f "$CURRENT_REPO_PATH/$DATA_DIR/$file" ]
 }
 
-# -------------------------
-# Check if a file exists in repo-specific data dir
-# -------------------------
-check_file() {
-    ensure_repo_data_dir
+# pretty status: returns colored "ok" / "missing"
+file_status_label() {
     local file="$1"
-    if [ -z "$file" ]; then
-        echo "Usage: check_file <filename>"
-        return 1
-    fi
-    
-    if [ -f "$CURRENT_REPO_PATH/$DATA_DIR/$file" ]; then
-        echo "ok"
-        return 0
+    if file_exists "$file"; then
+        printf "%sok%s" "$BGREEN" "$NC"
     else
-        echo "missing"
-        return 1
+        printf "%smissing%s" "$BRED" "$NC"
     fi
 }
 
 # -------------------------
-# Install dependencies
-# -------------------------
-install_dependencies() {
-    ensure_repo_data_dir
-    ensure_python_cmd || { error "Python not found. Activate env first."; return 1; }
-    
-    check_python_deps numpy torch torchvision torchaudio transformers datasets peft tqdm numpy scipy sklearn tiktoken google.protobuf bitsandbytes accelerate safetensors
-    if [ ${#MISSING_PY_DEPS[@]} -gt 0 ]; then
-        warn "Missing Python dependencies: ${MISSING_PY_DEPS[*]}"
-        auto_install_python_deps || {
-            error "Automatic installation failed. Install manually: pip install ${MISSING_PY_DEPS[*]}"
-            return 1
-        }
-        info "${BGREEN}Dependencies installed successfully.${NC}"
-    fi
-}
-
-# -------------------------
-# Run a Python script with repo context
-# Optional: $2 is expected input file in repo data dir
-# -------------------------
-run_script() {
-    local script_path="$1"
-    local expected_input="${2:-}"
-    shift
-    [ -n "$expected_input" ] && shift
-    
-    current_repo_path_check || return 1
-    
-    if [ -n "$expected_input" ]; then
-        if ! check_file "$expected_input"; then
-            error "Required input '$expected_input' missing in ${CURRENT_REPO_PATH}/${DATA_DIR}. Aborting."
-            return 1
-        fi
-    fi
-    
-    ensure_repo_data_dir
-    info "Running Script: $script_path for $CURRENT_REPO_PATH"
-    "$PYTHON_CMD" "$script_path" "$CURRENT_REPO_PATH" "$@"
-}
-
-# -------------------------
-# Select project
+# Repo selection (uses git helper resolve_selection)
+# - if repo missing and URL known, offer to clone it into REPO_BASE_DIR/<folder>
 # -------------------------
 select_project() {
     prompt_repo_selection || { info "Cancelled"; return 1; }
     
-    # REPO_SEL is set by prompt_repo_selection
     if ! resolve_selection "$REPO_SEL"; then
         error "Invalid selection"
         return 1
@@ -121,41 +65,141 @@ select_project() {
     # resolve_selection sets:
     #   REPO_SEL_URL, REPO_SEL_FOLDER, REPO_LOCAL_PATH
     # Use the helper's local path (REPO_LOCAL_PATH is REPO_BASE_DIR/<folder>)
-    CURRENT_REPO_PATH="$REPO_LOCAL_PATH"
-    
-    # ensure the local path exists
-    if [ ! -d "$CURRENT_REPO_PATH" ]; then
-        error "Repo folder $CURRENT_REPO_PATH does not exist locally. Clone it first."
+    if [ -z "${REPO_LOCAL_PATH:-}" ]; then
+        error "Internal: REPO_LOCAL_PATH not set by resolve_selection"
         return 1
     fi
     
+    # If repo folder missing, offer to clone (only if URL known)
+    if [ ! -d "$REPO_LOCAL_PATH" ]; then
+        if [ -n "${REPO_SEL_URL:-}" ]; then
+            printf "%sRepo '%s' not found locally.%s\n" "$BYELLOW" "$REPO_SEL_FOLDER" "$NC"
+            read -rp "Clone ${REPO_SEL_URL} into ${REPO_LOCAL_PATH}? (Y/n) " ans
+            ans="${ans:-Y}"
+            if [[ "$ans" =~ ^([Yy]|)$ ]]; then
+                mkdir -p "$REPO_BASE_DIR"
+                info "Cloning ${REPO_SEL_URL} -> ${REPO_LOCAL_PATH} ..."
+                if git clone "${REPO_SEL_URL}" "${REPO_LOCAL_PATH}"; then
+                    info "Clone completed."
+                else
+                    error "Clone failed. Aborting selection."
+                    return 1
+                fi
+            else
+                error "Repo not available locally. Selection aborted."
+                return 1
+            fi
+        else
+            error "No known URL for selection; cannot auto-clone. Clone manually and try again."
+            return 1
+        fi
+    fi
+    
+    # set CURRENT_REPO_PATH to the absolute repo-local path
+    CURRENT_REPO_PATH="$(realpath "$REPO_LOCAL_PATH")"
     info "Selected project: $CURRENT_REPO_PATH"
+    return 0
 }
 
+# -------------------------
+# Cleanup repo-specific JSONL
+# -------------------------
+cleanup_jsonl() {
+    ensure_repo_data_dir || return 1
+    warn "Removing all .jsonl files in $CURRENT_REPO_PATH/$DATA_DIR ..."
+    find "$CURRENT_REPO_PATH/$DATA_DIR" -type f -name "*.jsonl" -exec rm -f {} +
+    info "Done."
+}
 
-# Prompt selection at script start
+# -------------------------
+# Install dependencies
+# -------------------------
+install_dependencies() {
+    ensure_repo_data_dir || return 1
+    ensure_python_cmd || { error "Python not found. Activate env first."; return 1; }
+    
+    check_python_deps numpy torch torchvision torchaudio transformers datasets peft tqdm numpy scipy sklearn tiktoken google.protobuf bitsandbytes accelerate safetensors
+    if [ ${#MISSING_PY_DEPS[@]:-0} -gt 0 ]; then
+        warn "Missing Python dependencies: ${MISSING_PY_DEPS[*]}"
+        auto_install_python_deps || {
+            error "Automatic installation failed. Install manually: pip install ${MISSING_PY_DEPS[*]}"
+            return 1
+        }
+        info "Dependencies installed successfully."
+    fi
+}
+
+# -------------------------
+# Run a Python script with repo context
+# Optional: $2 is expected input file in repo data dir (checked before run)
+# -------------------------
+run_script() {
+    local script_path="$1"
+    local expected_input="${2:-}"
+    shift
+    # shift extra only if expected_input supplied (preserve further args)
+    if [ -n "$expected_input" ]; then shift || true; fi
+    
+    current_repo_path_check || return 1
+    ensure_repo_data_dir || return 1
+    
+    if [ -n "$expected_input" ]; then
+        if ! file_exists "$expected_input"; then
+            error "Required input '$expected_input' missing in ${CURRENT_REPO_PATH}/${DATA_DIR}. Aborting."
+            return 1
+        fi
+    fi
+    
+    info "Running Script: $script_path for $CURRENT_REPO_PATH"
+    "$PYTHON_CMD" "$script_path" "$CURRENT_REPO_PATH" "$@"
+}
+
+# -------------------------
+# Menu printing helper (reduces duplication)
+# -------------------------
+menu_entry() {
+    local idx="$1"; shift
+    local label="$1"; shift
+    local script_path="${1:-}"; shift || true
+    local expected_input="${1:-}"
+    
+    if [ -n "$expected_input" ]; then
+        # show colored status
+        printf "%2s) %s [%s]\n" "$idx" "$label" "$(file_status_label "$expected_input")"
+    else
+        printf "%2s) %s\n" "$idx" "$label"
+    fi
+}
+
+# -------------------------
+# Bootstrap: select project at start
+# -------------------------
 select_project || exit 1
 
 # -------------------------
 # Main menu loop
 # -------------------------
 while true; do
+    clear
     echo "[qwen2.5-coder:7b] Lora System Script Menu"
     echo "Current project: ${CURRENT_REPO_PATH:-None}"
     echo "-------------------------"
-    echo "1) Index Project Files "
-    echo "2) Parse Indexed Code"
-    echo "3) Build Dependency Graph"
-    echo "4) Enrich"
-    echo "5) Link Headers"
-    echo "6) Generate QNA"
-    echo "7) Train LoRA"
-    echo "8) Embed Code"
-    echo "9) Query System"
-    echo "10) Evaluate"
+    
+    menu_entry 1  "Index Project Files"
+    menu_entry 2  "Parse Indexed Code"                "qwen/02_parse_code.py"               "parsed_files.jsonl"
+    menu_entry 3  "Build Dependency Graph"            "qwen/02b_build_dependency_graphs.py" "dep_graph_functions.jsonl"
+    menu_entry 4  "Enrich"                            "qwen/03_enrich_with_model.py"        "parsed_functions.jsonl"
+    menu_entry 5  "Link Headers"                      "qwen/04_link_headers.py"             "enriched_functions.jsonl"
+    menu_entry 6  "Generate QNA"                      "qwen/05_generate_qna.py"             "enriched_functions.jsonl"
+    menu_entry 7  "Train LoRA"                        "qwen/06_train_lora.py"               "qna_train.jsonl"
+    menu_entry 8  "Embed Code"                        "qwen/07_embed_code.py"               "lora_adapter.jsonl"
+    menu_entry 9  "Query System"                      "qwen/08_query_system.py"             "embeddings.jsonl"
+    menu_entry 10 "Evaluate"                          "qwen/09_evaluate.py"                 "qna_dataset.jsonl"
+    
     echo "21) Install Dependencies"
     echo "99) Cleanup .jsonl files"
-    echo "0) Exit"
+    echo " 0) Exit"
+    echo "-------------------------"
     read -p "Enter your choice: " choice
     
     case $choice in
