@@ -215,6 +215,8 @@ def _humanize_bytes(n: int) -> str:
 def index_files(
     repo_directory: Path, output_path: Path, extensions: Iterable[str], workers: int
 ) -> int:
+    global _temp_output_path  # ← moved here (top of function)
+
     start = time.time()
     logging.info("Scanning for files under %s", repo_directory)
     candidates, total_bytes = _iter_candidate_paths(repo_directory, extensions)
@@ -240,9 +242,7 @@ def index_files(
     failures = 0
     bytes_done = 0
 
-    # We will use a ThreadPoolExecutor and update progress as futures complete
     futures = []
-    # map future -> path size for progress bytes accounting
     fut_to_size = {}
 
     with ThreadPoolExecutor(max_workers=workers) as exc:
@@ -256,7 +256,6 @@ def index_files(
             except Exception:
                 fut_to_size[fut] = 0
 
-        # as futures complete, send results to writer and update progress display
         for fut in as_completed(futures):
             if _shutdown.is_set():
                 break
@@ -273,17 +272,15 @@ def index_files(
                 bytes_done += size
             else:
                 failures += 1
-                bytes_done += size  # still count progress to move bar along
+                bytes_done += size
 
             _print_progress(indexed + failures, total, bytes_done, total_bytes)
 
-    # signal writer that we're done
     try:
         q.put(None)
     except Exception:
         pass
 
-    # Wait briefly for writer to finish writing
     writer.join(timeout=30)
 
     elapsed = time.time() - start
@@ -291,8 +288,7 @@ def index_files(
         logging.error("Interrupted. Partial output (if any) at %s", _temp_output_path)
         raise SystemExit(1)
 
-    # Move temp -> final atomically
-    global _temp_output_path
+    # atomic move
     if _temp_output_path and Path(_temp_output_path).exists():
         output_path.parent.mkdir(parents=True, exist_ok=True)
         os.replace(str(_temp_output_path), str(output_path))
@@ -301,7 +297,6 @@ def index_files(
         logging.error("Temporary output missing; nothing to move.")
         raise SystemExit(1)
 
-    # final newline to finish progress bar line
     sys.stderr.write("\n")
     logging.info(
         "Indexing complete: %d indexed, %d failures, elapsed %.2fs",
