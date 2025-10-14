@@ -196,8 +196,8 @@ while true; do
     
     menu_entry 1  "Index Project Files"
     menu_entry 2  "Parse Indexed Code"                "qwen/02_parse_code.py"               "file_index.jsonl"
-    menu_entry 3  "Build Dependency Graph"            "qwen/02b_build_dependency_graphs.py" "dep_graph_functions.jsonl"
-    menu_entry 4  "Enrich"                            "qwen/03_enrich_with_model.py"        "parsed_functions.jsonl"
+    menu_entry 3  "Build Dependency Graph"            "qwen/02b_build_dependency_graphs.py" "parsed_functions.jsonl"
+    menu_entry 4  "Enrich"                            "qwen/03_enrich_with_model.py"        "dep_graph_functions.jsonl"
     menu_entry 5  "Link Headers"                      "qwen/04_link_headers.py"             "enriched_functions.jsonl"
     menu_entry 6  "Generate QNA"                      "qwen/05_generate_qna.py"             "enriched_functions.jsonl"
     menu_entry 7  "Train LoRA"                        "qwen/06_train_lora.py"               "qna_train.jsonl"
