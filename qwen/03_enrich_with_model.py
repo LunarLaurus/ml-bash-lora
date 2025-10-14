@@ -85,7 +85,7 @@ def naive_risk_notes(body: str, suffix: str) -> str:
 # ------------------------- model -------------------------
 def load_model():
     logging.info("Loading model Salesforce/codet5-small...")
-    pipe = pipeline("text2text-generation", model="Salesforce/codet5-small", device=-1)
+    pipe = pipeline("text2text-generation", model="Salesforce/codet5-small", device=0)
     logging.info("Model loaded successfully.")
     return pipe
 
@@ -118,7 +118,7 @@ Content:
 
 
 def run_model(pipe, prompts: list) -> list:
-    outputs = pipe(prompts, max_length=256, truncation=True)
+    outputs = pipe(prompts)
     results = []
     for out in outputs:
         text = out.get("generated_text", "")
