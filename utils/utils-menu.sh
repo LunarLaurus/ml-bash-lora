@@ -119,7 +119,6 @@ find_large_projects() {
 # Menu
 # ------------------------------
 while true; do
-    clear
     echo -e "\n${CYAN}=== Diagnostics & Utilities (selective) ===${NC}"
     echo "---- Apt single installs ----"
     echo "10) Install git"

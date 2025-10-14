@@ -8,7 +8,6 @@ show_disk_usage() {
 }
 
 while true; do
-    clear
     info "\n${YELLOW}=== Diagnostics Menu ===${NC}"
     info "1) Show Disk Usage"
     info "${BRED}0) Back to Main Menu${NC}"

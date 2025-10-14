@@ -1,5 +1,4 @@
 #!/bin/bash
-set -euo pipefail
 
 # -------------------------
 # Source helpers
@@ -141,7 +140,6 @@ select_project || exit 1
 # Main menu loop
 # -------------------------
 while true; do
-    clear
     echo "[qwen2.5-coder:7b] Lora System Script Menu"
     echo "Current project: ${CURRENT_REPO_PATH:-None}"
     echo "-------------------------"

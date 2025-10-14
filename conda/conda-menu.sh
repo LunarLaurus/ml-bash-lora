@@ -19,7 +19,6 @@ env_disk_usage() {
 ensure_python_cmd || { warn "${RED}Python not found for active environment. Activate/Create an Env. first.${NC}"; }
 
 while true; do
-    clear
     echo -e "\n${BCYAN}=== Conda / ML Environment Menu ===${NC}"
     check_env || true
     echo "1) Install Miniforge (Conda)"

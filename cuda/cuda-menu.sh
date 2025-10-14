@@ -6,7 +6,6 @@ source "$SCRIPT_DIR/install_cuda.sh"
 source "$SCRIPT_DIR/remove_cuda.sh"
 
 while true; do
-    clear
     echo -e "\n${BGREEN}=== CUDA Toolkit Menu ===${NC}"
     echo "1) Detect and select CUDA"
     echo "2) Install CUDA toolkit"
