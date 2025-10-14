@@ -144,8 +144,16 @@ def model_prompt_file(file_path: str, fn_entries: list) -> str:
 
 
 def run_model(pipe, prompt: str) -> dict:
+    """
+    Run the model on a single prompt sequentially.
+    Truncation ensures we never exceed model limits.
+    Returns a dict with expected keys.
+    """
     try:
-        output = pipe(prompt)[0]["generated_text"]
+        # Wrap in a list for pipeline, truncate internally too
+        output = pipe([prompt], truncation=True, max_length=MAX_TOKENS)[0][
+            "generated_text"
+        ]
         return json.loads(output)
     except Exception:
         return {
