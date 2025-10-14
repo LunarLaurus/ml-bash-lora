@@ -78,16 +78,16 @@ while true; do
     read -p "Enter your choice [1-12]: " choice
     
     case $choice in
-        1) run_script 01_index_files.py ;;
-        2) run_script 02_parse_code.py ;;
-        3) run_script 02b_build_dependency_graphs.py ;;
-        4) run_script 03_enrich_with_model.py ;;
-        5) run_script 04_link_headers.py ;;
-        6) run_script 05_generate_qna.py ;;
-        7) run_script 06_train_lora.py ;;
-        8) run_script 07_embed_code.py ;;
-        9) run_script 08_query_system.py ;;
-        10) run_script 09_evaluate.py ;;
+        1) run_script qwen/01_index_files.py ;;
+        2) run_script qwen/02_parse_code.py ;;
+        3) run_script qwen/02b_build_dependency_graphs.py ;;
+        4) run_script qwen/03_enrich_with_model.py ;;
+        5) run_script qwen/04_link_headers.py ;;
+        6) run_script qwen/05_generate_qna.py ;;
+        7) run_script qwen/06_train_lora.py ;;
+        8) run_script qwen/07_embed_code.py ;;
+        9) run_script qwen/08_query_system.py ;;
+        10) run_script qwen/09_evaluate.py ;;
         21) install_dependencies ;;
         0) exit 0 ;;
         *) echo "Invalid choice. Please try again." ;;
