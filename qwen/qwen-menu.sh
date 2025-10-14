@@ -142,7 +142,13 @@ run_script() {
     
     current_repo_path_check || return 1
     ensure_repo_data_dir || return 1
+    local adjusted_path="$PROJECT_ROOT/$script_path"
     
+    # Verify script file exists (avoid failing with cryptic message)
+    if [ ! -f "$adjusted_path" ]; then
+        error "Script not found: $adjusted_path | ($script_path)"
+        return 1
+    fi
     if [ -n "$expected_input" ]; then
         if ! file_exists "$expected_input"; then
             error "Required input '$expected_input' missing in ${CURRENT_REPO_PATH}/${DATA_DIR}. Aborting."
@@ -150,8 +156,8 @@ run_script() {
         fi
     fi
     
-    info "Running Script: $script_path for $CURRENT_REPO_PATH"
-    "$PYTHON_CMD" "$script_path" "$CURRENT_REPO_PATH" "$@"
+    info "Running Script: $adjusted_path for $CURRENT_REPO_PATH"
+    "$PYTHON_CMD" "$adjusted_path" "$CURRENT_REPO_PATH" "$@"
 }
 
 # -------------------------
