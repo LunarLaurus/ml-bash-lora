@@ -52,7 +52,10 @@ def find_implementations(header_ast: dict, repo_directory: Path) -> List[Dict]:
 
 # ------------------ main linking ------------------
 def link_headers(
-    repo_directory: Path, parsed_functions_path: Path, dep_graph_path: Path
+    repo_directory: Path,
+    parsed_functions_path: Path,
+    dep_graph_path: Path,
+    output_path: Path,
 ):
     linked_functions = []
 
@@ -99,8 +102,8 @@ def link_headers(
                         )
 
     # Save results
-    LINKED_OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    with LINKED_OUTPUT.open("w", encoding="utf-8") as f:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", encoding="utf-8") as f:
         for entry in linked_functions:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
@@ -116,4 +119,10 @@ if __name__ == "__main__":
 
     repo_dir = Path(sys.argv[1])
 
-    link_headers(repo_dir, ENRICHED_FUNCTIONS, GRAPH_FUNCTIONS)
+    if not repo_dir.exists():
+        print("Repo dir not found: " + repo_dir)
+        sys.exit(1)
+
+    rel_output_path = repo_dir / LINKED_OUTPUT
+
+    link_headers(repo_dir, ENRICHED_FUNCTIONS, GRAPH_FUNCTIONS, rel_output_path)

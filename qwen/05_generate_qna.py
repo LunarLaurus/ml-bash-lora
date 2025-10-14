@@ -14,6 +14,7 @@ Outputs:
 
 import json
 from pathlib import Path
+import sys
 
 ENRICHED_FUNCTIONS = Path("data/enriched_functions.jsonl")
 LINKED_FUNCTIONS = Path("data/linked_functions.jsonl")
@@ -140,12 +141,27 @@ def write_qna(qnas, output_path: Path):
     print(f"[INFO] Wrote {len(qnas)} Q&A entries to {output_path}")
 
 
-def main():
+# ------------------ entry point ------------------
+if __name__ == "__main__":
+    if len(sys.argv) != 2:
+        print("Usage: python3 scripts/04_link_headers.py <repo_directory>")
+        sys.exit(1)
+
+    repo_dir = Path(sys.argv[1])
     enriched_entries = load_jsonl(ENRICHED_FUNCTIONS)
     linked_entries = load_jsonl(LINKED_FUNCTIONS)
     qnas = generate_qna(enriched_entries, linked_entries)
-    write_qna(qnas, QNA_OUTPUT)
 
+    if not repo_dir.exists():
+        print("Repo dir not found: " + repo_dir)
+        sys.exit(1)
+    if not ENRICHED_FUNCTIONS.exists():
+        print("Enriched functions file not found: " + ENRICHED_FUNCTIONS)
+        sys.exit(1)
+    if not LINKED_FUNCTIONS.exists():
+        print("Linked functions file not found: " + LINKED_FUNCTIONS)
+        sys.exit(1)
 
-if __name__ == "__main__":
-    main()
+    rel_output_path = repo_dir / QNA_OUTPUT
+
+    write_qna(qnas, rel_output_path)

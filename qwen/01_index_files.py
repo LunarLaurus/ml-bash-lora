@@ -322,9 +322,11 @@ def main(argv: Optional[List[str]] = None):
         )
         sys.exit(1)
 
+    rel_output_path = repo_dir / OUTPUT_PATH
+
     try:
-        count = index_files(repo_dir, OUTPUT_PATH, args.extensions, args.workers)
-        print(f"Indexed {count} files. Saved to {OUTPUT_PATH}")
+        count = index_files(repo_dir, rel_output_path, args.extensions, args.workers)
+        print(f"Indexed {count} files. Saved to {rel_output_path}")
     except Exception as exc:
         logging.exception("Indexing failed: %s", exc)
         sys.exit(1)

@@ -486,9 +486,11 @@ def main(argv: Optional[List[str]] = None):
         logging.info("No files found; exiting.")
         return
 
+    rel_output_path = repo_dir / OUTPUT_PATH
+
     q: "queue.Queue[Optional[dict]]" = queue.Queue(maxsize=args.workers * 4)
     writer = threading.Thread(
-        target=writer_thread_fn, args=(OUTPUT_PATH, q), daemon=True
+        target=writer_thread_fn, args=(rel_output_path, q), daemon=True
     )
     writer.start()
 
@@ -532,9 +534,11 @@ def main(argv: Optional[List[str]] = None):
         raise SystemExit(1)
 
     if _temp_output_path and Path(_temp_output_path).exists():
-        OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-        os.replace(str(_temp_output_path), str(OUTPUT_PATH))
-        logging.info("Atomically moved temp %s -> %s", _temp_output_path, OUTPUT_PATH)
+        rel_output_path.parent.mkdir(parents=True, exist_ok=True)
+        os.replace(str(_temp_output_path), str(rel_output_path))
+        logging.info(
+            "Atomically moved temp %s -> %s", _temp_output_path, rel_output_path
+        )
     else:
         logging.error("Temporary output missing; nothing to move.")
         raise SystemExit(1)

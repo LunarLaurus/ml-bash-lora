@@ -457,9 +457,13 @@ def main(argv: Optional[List[str]] = None):
             "repo_directory %s is not a directory or does not exist", repo_dir
         )
         sys.exit(1)
+    rel_output_path_funcs = repo_dir / OUT_FUNCS
+    rel_output_path_files = repo_dir / OUT_FILES
 
     try:
-        build_and_write_graphs(repo_dir, DEFAULT_PARSED, OUT_FUNCS, OUT_FILES)
+        build_and_write_graphs(
+            repo_dir, DEFAULT_PARSED, rel_output_path_funcs, rel_output_path_files
+        )
     except KeyboardInterrupt:
         logging.error("Interrupted.")
         sys.exit(1)

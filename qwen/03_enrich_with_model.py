@@ -341,6 +341,9 @@ def main():
         sys.exit(1)
     repo_dir = Path(sys.argv[1])
 
+    if not repo_dir.exists():
+        logging.error("Repo dir not found: %s", repo_dir)
+        sys.exit(1)
     if not FUNCTIONS_PARSED.exists():
         logging.error("Parsed functions file not found: %s", FUNCTIONS_PARSED)
         sys.exit(1)
@@ -348,6 +351,7 @@ def main():
         logging.error("Dependency graph file not found: %s", GRAPH_FUNCTIONS)
         sys.exit(1)
 
+    rel_output_path = repo_dir / ENRICHED_OUTPUT
     dep_graph = {}
     with GRAPH_FUNCTIONS.open("r", encoding="utf-8") as f:
         for line in f:
@@ -362,8 +366,8 @@ def main():
                 logging.warning("Skipped dep_graph entry without 'id': %s", obj)
 
     try:
-        pipe, tokenizer = load_model()
-        enrich_functions_async(FUNCTIONS_PARSED, ENRICHED_OUTPUT, dep_graph, pipe)
+        load_model()
+        enrich_functions_async(FUNCTIONS_PARSED, rel_output_path, dep_graph, PIPELINE)
     except KeyboardInterrupt:
         logging.warning("KeyboardInterrupt received! Shutting down...")
         _shutdown.set()
