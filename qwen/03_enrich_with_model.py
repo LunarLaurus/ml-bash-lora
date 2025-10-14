@@ -22,11 +22,14 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import re
 from tqdm import tqdm
+import torch
 from transformers import pipeline
 
 FUNCTIONS_PARSED = Path("data/parsed_functions.jsonl")
 GRAPH_FUNCTIONS = Path("data/dep_graph_functions.jsonl")
 ENRICHED_OUTPUT = Path("data/enriched_functions.jsonl")
+MAX_TOKENS = 512  # approximate token limit for codet5-small
+BATCH_SIZE = 16  # batch size for GPU inference
 
 # ------------------------- heuristics -------------------------
 CALL_SITE_REGEX = re.compile(r"\b([A-Za-z_]\w*)\s*\(")
@@ -83,25 +86,39 @@ def naive_risk_notes(body: str, suffix: str) -> str:
 
 
 # ------------------------- model -------------------------
+def get_device():
+    return 0 if torch.cuda.is_available() else -1
+
+
 def load_model():
-    logging.info("Loading model Salesforce/codet5-small...")
-    pipe = pipeline("text2text-generation", model="Salesforce/codet5-small", device=0)
+    device = get_device()
+    logging.info("Loading model Salesforce/codet5-small on device %s...", device)
+    pipe = pipeline(
+        "text2text-generation", model="Salesforce/codet5-small", device=device
+    )
     logging.info("Model loaded successfully.")
     return pipe
+
+
+def chunk_text(text: str, max_tokens: int = MAX_TOKENS) -> str:
+    """Truncate text to approximately max_tokens words."""
+    words = text.split()
+    if len(words) <= max_tokens:
+        return text
+    return " ".join(words[:max_tokens])
 
 
 def model_prompt_function(fn_entry: dict) -> str:
     fn = fn_entry.get("function", {})
     suffix = Path(fn_entry.get("file_path", "")).suffix.lower()
-    body = fn.get("body") or ""
+    body = chunk_text(fn.get("body") or "")
     signature = fn.get("signature") or ""
     return f"""Summarize the following {('assembly' if suffix=='.asm' else 'C')} function.
 Return a single-line JSON with keys: summary, intent_tags (list), risk_notes, change_recipe, confidence.
 Function signature:
 {signature}
 Function body:
-{body}
-"""
+{body}"""
 
 
 def model_prompt_file(file_path: str, fn_entries: list) -> str:
@@ -113,26 +130,27 @@ Aggregate function summaries and provide:
 - risk_notes
 - change_recipe
 Content:
-{pseudo_body}
-"""
+{pseudo_body}"""
 
 
-def run_model(pipe, prompts: list) -> list:
-    outputs = pipe(prompts)
+def batch_run_model(pipe, prompts: list, batch_size: int = BATCH_SIZE) -> list:
     results = []
-    for out in outputs:
-        text = out.get("generated_text", "")
-        try:
-            data = json.loads(text)
-        except Exception:
-            data = {
-                "summary": text,
-                "intent_tags": [],
-                "risk_notes": "",
-                "change_recipe": "",
-                "confidence": 0.6,
-            }
-        results.append(data)
+    for i in range(0, len(prompts), batch_size):
+        batch = prompts[i : i + batch_size]
+        outputs = pipe(batch)
+        for out in outputs:
+            text = out.get("generated_text", "")
+            try:
+                data = json.loads(text)
+            except Exception:
+                data = {
+                    "summary": text,
+                    "intent_tags": [],
+                    "risk_notes": "",
+                    "change_recipe": "",
+                    "confidence": 0.6,
+                }
+            results.append(data)
     return results
 
 
@@ -182,83 +200,75 @@ def enrich_functions(parsed_path: Path, output_path: Path, dep_graph: dict):
     writer.start()
 
     logging.info("Processing functions with ThreadPoolExecutor...")
+
+    # Prepare prompts and process in batches
+    prompts = []
+    futures_map = {}
     with ThreadPoolExecutor() as exc:
-        futures = {
-            exc.submit(process_function_entry, entry, pipe, dep_graph, q): entry
-            for entry in entries
-        }
-        for fut in tqdm(as_completed(futures), total=len(futures), desc="Functions"):
-            try:
-                fut.result()
-            except Exception:
-                logging.exception("Error processing function %s", futures[fut])
+        for entry in entries:
+            fn_prompt = model_prompt_function(entry)
+            prompts.append(fn_prompt)
+            futures_map[fn_prompt] = entry
+
+        # Process in batches
+        for i in tqdm(range(0, len(prompts), BATCH_SIZE), desc="Function batches"):
+            batch_prompts = prompts[i : i + BATCH_SIZE]
+            batch_results = batch_run_model(pipe, batch_prompts)
+            for j, res in enumerate(batch_results):
+                entry = futures_map[batch_prompts[j]]
+                entry["summary"] = res.get("summary", "")
+                entry["change_recipe"] = res.get("change_recipe", "")
+                entry["confidence_score"] = float(res.get("confidence", 0.6))
+                entry["generated_at"] = datetime.utcnow().isoformat() + "Z"
+
+                fn = entry.get("function", {})
+                body = fn.get("body") or ""
+                suffix = Path(entry.get("file_path", "")).suffix.lower()
+                entry["loc"] = count_loc(body)
+                entry["cyclomatic"] = naive_cyclomatic(body)
+                entry["calls"] = CALL_SITE_REGEX.findall(body)
+                entry["intent_tags"] = detect_intent_tags(body, suffix)
+                entry["risk_notes"] = naive_risk_notes(body, suffix)
+
+                key = entry.get("id")
+                graph_info = dep_graph.get(key, {})
+                entry["callers"] = graph_info.get("callers", [])
+                entry["callees"] = graph_info.get("callees", [])
+                entry["graph_distance"] = graph_info.get(
+                    "graph_distance", {"to_entry_points": None}
+                )
+
+                q.put(entry)
 
     logging.info("Processing file-level summaries...")
     for file_path, fn_entries in tqdm(
         files_map.items(), total=len(files_map), desc="Files"
     ):
-        file_entry = process_file_entry(file_path, fn_entries, pipe)
+        file_prompt = model_prompt_file(file_path, fn_entries)
+        file_res = batch_run_model(pipe, [file_prompt])[0]
+        file_entry = {
+            "id": f"file:{file_path}",
+            "repo": str(Path.cwd().name),
+            "file_path": file_path,
+            "num_functions": len(fn_entries),
+            "loc": sum(fn.get("loc", 0) for fn in fn_entries),
+            "cyclomatic": sum(fn.get("cyclomatic", 0) for fn in fn_entries),
+            "intent_tags": sorted(
+                {tag for fn in fn_entries for tag in fn.get("intent_tags", [])}
+            ),
+            "risk_notes": " ".join(
+                fn.get("risk_notes", "") for fn in fn_entries if fn.get("risk_notes")
+            ),
+            "summary": file_res.get("summary", ""),
+            "change_recipe": file_res.get("change_recipe", ""),
+            "generated_at": datetime.utcnow().isoformat() + "Z",
+            "functions": [fn.get("id") for fn in fn_entries],
+        }
         q.put(file_entry)
 
     q.put(None)
     writer.join()
     logging.info("Enrichment completed successfully.")
-
-
-def process_function_entry(entry: dict, pipe, dep_graph: dict, q: "queue.Queue[dict]"):
-    fn = entry.get("function", {})
-    body = fn.get("body") or ""
-    suffix = Path(entry.get("file_path", "")).suffix.lower()
-
-    entry["loc"] = count_loc(body)
-    entry["cyclomatic"] = naive_cyclomatic(body)
-    entry["calls"] = CALL_SITE_REGEX.findall(body)
-    entry["intent_tags"] = detect_intent_tags(body, suffix)
-    entry["risk_notes"] = naive_risk_notes(body, suffix)
-
-    key = entry.get("id")
-    graph_info = dep_graph.get(key, {})
-    entry["callers"] = graph_info.get("callers", [])
-    entry["callees"] = graph_info.get("callees", [])
-    entry["graph_distance"] = graph_info.get(
-        "graph_distance", {"to_entry_points": None}
-    )
-
-    prompt = model_prompt_function(entry)
-    model_result = run_model(pipe, [prompt])[0]
-    entry["summary"] = model_result.get("summary", "")
-    entry["change_recipe"] = model_result.get("change_recipe", "")
-    entry["confidence_score"] = float(model_result.get("confidence", 0.6))
-    entry["generated_at"] = datetime.utcnow().isoformat() + "Z"
-
-    q.put(entry)
-
-
-def process_file_entry(file_path: str, fn_entries: list, pipe) -> dict:
-    file_loc = sum(fn.get("loc", 0) for fn in fn_entries)
-    file_cyclo = sum(fn.get("cyclomatic", 0) for fn in fn_entries)
-    file_tags = sorted({tag for fn in fn_entries for tag in fn.get("intent_tags", [])})
-    file_risks = " ".join(
-        fn.get("risk_notes", "") for fn in fn_entries if fn.get("risk_notes")
-    )
-
-    prompt = model_prompt_file(file_path, fn_entries)
-    model_result = run_model(pipe, [prompt])[0]
-
-    return {
-        "id": f"file:{file_path}",
-        "repo": str(Path.cwd().name),
-        "file_path": file_path,
-        "num_functions": len(fn_entries),
-        "loc": file_loc,
-        "cyclomatic": file_cyclo,
-        "intent_tags": file_tags,
-        "risk_notes": file_risks,
-        "summary": model_result.get("summary", ""),
-        "change_recipe": model_result.get("change_recipe", ""),
-        "generated_at": datetime.utcnow().isoformat() + "Z",
-        "functions": [fn.get("id") for fn in fn_entries],
-    }
 
 
 # ------------------------- main -------------------------
