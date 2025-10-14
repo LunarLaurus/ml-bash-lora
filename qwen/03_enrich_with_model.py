@@ -16,7 +16,7 @@ import json
 import sys
 import logging
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 import re
 import textwrap
 from tqdm import tqdm
@@ -158,7 +158,7 @@ def run_model(pipe, prompt: str) -> dict:
     try:
         # ensure we call pipeline with a list so it behaves consistently
         with torch.no_grad():
-            outputs = pipe([prompt], truncation=True, max_length=MAX_TOKENS)
+            outputs = pipe([prompt], truncation=True)
 
         # normalize to text
         text = ""
@@ -257,7 +257,7 @@ def enrich_functions(parsed_path: Path, output_path: Path, dep_graph: dict, pipe
         entry["summary"] = res.get("summary", "")
         entry["change_recipe"] = res.get("change_recipe", "")
         entry["confidence_score"] = float(res.get("confidence", 0.6))
-        entry["generated_at"] = datetime.timetz.utcnow().isoformat() + "Z"
+        entry["generated_at"] = datetime.now(timezone.utc).isoformat()
 
         enriched_entries.append(entry)
 
