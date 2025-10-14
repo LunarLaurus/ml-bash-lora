@@ -62,12 +62,6 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         help="File extensions to include (e.g. .c .h .asm). Default: .c .h .asm",
     )
     p.add_argument(
-        "--output",
-        type=Path,
-        default=OUTPUT_PATH,
-        help=f"Output JSONL file (default: {OUTPUT_PATH})",
-    )
-    p.add_argument(
         "--workers",
         type=int,
         default=DEFAULT_MAX_WORKERS,
@@ -329,8 +323,8 @@ def main(argv: Optional[List[str]] = None):
         sys.exit(1)
 
     try:
-        count = index_files(repo_dir, args.output, args.extensions, args.workers)
-        print(f"Indexed {count} files. Saved to {args.output}")
+        count = index_files(repo_dir, OUTPUT_PATH, args.extensions, args.workers)
+        print(f"Indexed {count} files. Saved to {OUTPUT_PATH}")
     except Exception as exc:
         logging.exception("Indexing failed: %s", exc)
         sys.exit(1)

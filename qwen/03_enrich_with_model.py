@@ -1,63 +1,287 @@
-import os
-from pathlib import Path
+#!/usr/bin/env python3
+"""
+04_enrich_functions.py
+
+Enrich function-level and file-level JSONL for LoRA training.
+
+- Reads parsed function JSONL (output of parse_code)
+- Computes heuristics (LOC, cyclomatic complexity, calls, intent tags, risk notes)
+- Integrates dependency graph info (callers/callees, graph distance)
+- Groups functions per file to build file-level summaries
+- Uses Salesforce/codet5-small for model-based summarization
+- Outputs a single enriched JSONL
+"""
+
 import json
-from transformers import pipeline, AutoTokenizer, AutoModelForSeq2SeqLM
+import sys
+import threading
+import queue
+from pathlib import Path
+from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from hashlib import sha256
+import re
+
+from transformers import pipeline
+
+FUNCTIONS_PARSED = Path("data/parsed_functions.jsonl")
+GRAPH_FUNCTIONS = Path("data/dep_graph_functions.jsonl")
+ENRICHED_OUTPUT = Path("data/enriched_functions.jsonl")
+
+# ------------------------- heuristics -------------------------
+CALL_SITE_REGEX = re.compile(r"\b([A-Za-z_]\w*)\s*\(")
+CONTROL_KEYWORDS = re.compile(
+    r"\b(if|else|for|while|case|switch|goto|&&|\|\||\?|return)\b"
+)
 
 
-def enrich_with_model(repo_directory):
-    tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen-7B")
-    model = AutoModelForSeq2SeqLM.from_pretrained("Qwen/Qwen-7B")
+def naive_cyclomatic(body: str) -> int:
+    if not body:
+        return 1
+    return 1 + len(CONTROL_KEYWORDS.findall(body))
 
-    summarizer = pipeline("summarization", model=model, tokenizer=tokenizer)
-    classifier = pipeline(
-        "sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english"
+
+def count_loc(body: str) -> int:
+    return sum(1 for l in body.splitlines() if l.strip())
+
+
+def detect_intent_tags(body: str, suffix: str) -> list:
+    tags = set()
+    b = body.lower()
+    if suffix == ".asm":
+        tags.add("asm")
+    if re.search(r"\b(read|write|scanf|printf|fopen|fread|fwrite)\b", b):
+        tags.add("I/O")
+    if re.search(r"\b(malloc|calloc|realloc|free|memcpy|memmove|memset)\b", b):
+        tags.add("memory")
+    if re.search(r"\b(pthread_|mutex|lock|unlock|fork|exec)\b", b):
+        tags.add("concurrency")
+    if re.search(r"\b(pow|sqrt|sin|cos|log|exp)\b", b):
+        tags.add("math")
+    if re.search(r"\b(strcmp|strcpy|strncpy|strlen|strcat|memchr)\b", b):
+        tags.add("string")
+    if re.search(r"\b(md5|sha1|sha256|aes|crypto_)\b", b):
+        tags.add("crypto")
+    if re.search(r"[&|^~<>]{1,2}", body):
+        tags.add("bitops")
+    if not tags:
+        tags.add("other")
+    return sorted(tags)
+
+
+def naive_risk_notes(body: str, suffix: str) -> str:
+    notes = []
+    if "malloc" in body or "free" in body or "realloc" in body:
+        notes.append("Uses dynamic memory — watch for leaks and double-free.")
+    if re.search(r"\b(strcpy|strcat|gets)\b", body):
+        notes.append("Potential buffer overflow (unsafe string ops).")
+    if "pthread" in body or "mutex" in body:
+        notes.append("Concurrency: locking / race conditions possible.")
+    if suffix == ".asm":
+        notes.append(
+            "Assembly code — ABI/calling conventions matter; harder to analyze."
+        )
+    return " ".join(notes)
+
+
+# ------------------------- model -------------------------
+def load_model():
+    return pipeline("text2text-generation", model="Salesforce/codet5-small", device=-1)
+
+
+def model_prompt_function(fn_entry: dict) -> str:
+    fn = fn_entry.get("function", {})
+    suffix = Path(fn_entry.get("file_path", "")).suffix.lower()
+    body = fn.get("body") or ""
+    signature = fn.get("signature") or ""
+    return f"""Summarize the following {('assembly' if suffix=='.asm' else 'C')} function.
+Return a single-line JSON with keys: summary, intent_tags (list), risk_notes, change_recipe, confidence.
+Function signature:
+{signature}
+Function body:
+{body}
+"""
+
+
+def model_prompt_file(file_path: str, fn_entries: list) -> str:
+    pseudo_body = "\n\n".join(fn.get("summary", "") for fn in fn_entries)
+    return f"""Summarize this file: {file_path}.
+Aggregate function summaries and provide:
+- summary
+- intent_tags
+- risk_notes
+- change_recipe
+Content:
+{pseudo_body}
+"""
+
+
+def run_model(pipe, prompts: list) -> list:
+    outputs = pipe(prompts, max_length=256, truncation=True)
+    results = []
+    for out in outputs:
+        text = out.get("generated_text", "")
+        try:
+            data = json.loads(text)
+        except Exception:
+            data = {
+                "summary": text,
+                "intent_tags": [],
+                "risk_notes": "",
+                "change_recipe": "",
+                "confidence": 0.6,
+            }
+        results.append(data)
+    return results
+
+
+# ------------------------- threading writer -------------------------
+_shutdown = threading.Event()
+
+
+def writer_thread(output_path: Path, q: "queue.Queue[dict]"):
+    tmp_path = output_path.with_suffix(output_path.suffix + ".tmp")
+    tmp_path.parent.mkdir(parents=True, exist_ok=True)
+    written = 0
+    with tmp_path.open("w", encoding="utf-8") as f:
+        while not _shutdown.is_set():
+            try:
+                item = q.get(timeout=0.5)
+            except queue.Empty:
+                continue
+            if item is None:
+                break
+            f.write(json.dumps(item, ensure_ascii=False) + "\n")
+            written += 1
+            q.task_done()
+    # atomic rename
+    tmp_path.replace(output_path)
+    print(f"[INFO] Wrote {written} entries to {output_path}")
+
+
+# ------------------------- enrichment -------------------------
+def enrich_functions(parsed_path: Path, output_path: Path, dep_graph: dict):
+    pipe = load_model()
+    entries: list[dict] = []
+    with parsed_path.open("r", encoding="utf-8") as f:
+        for ln in f:
+            ln = ln.strip()
+            if ln:
+                entries.append(json.loads(ln))
+
+    # group functions by file
+    files_map = {}
+    for entry in entries:
+        file_path = entry["file_path"]
+        files_map.setdefault(file_path, []).append(entry)
+
+    q: "queue.Queue[dict]" = queue.Queue(maxsize=32)
+    writer = threading.Thread(target=writer_thread, args=(output_path, q), daemon=True)
+    writer.start()
+
+    with ThreadPoolExecutor() as exc:
+        futures = []
+        for entry in entries:
+            futures.append(
+                exc.submit(process_function_entry, entry, pipe, dep_graph, q)
+            )
+        for fut in as_completed(futures):
+            try:
+                fut.result()
+            except Exception:
+                continue
+
+    # File-level overviews
+    for file_path, fn_entries in files_map.items():
+        file_entry = process_file_entry(file_path, fn_entries, pipe)
+        q.put(file_entry)
+
+    # finish writing
+    q.put(None)
+    writer.join()
+
+
+def process_function_entry(entry: dict, pipe, dep_graph: dict, q: "queue.Queue[dict]"):
+    fn = entry.get("function", {})
+    body = fn.get("body") or ""
+    suffix = Path(entry.get("file_path", "")).suffix.lower()
+
+    # Heuristics
+    entry["loc"] = count_loc(body)
+    entry["cyclomatic"] = naive_cyclomatic(body)
+    entry["calls"] = CALL_SITE_REGEX.findall(body)
+    entry["intent_tags"] = detect_intent_tags(body, suffix)
+    entry["risk_notes"] = naive_risk_notes(body, suffix)
+
+    # Graph info
+    key = entry.get("id")
+    graph_info = dep_graph.get(key, {})
+    entry["callers"] = graph_info.get("callers", [])
+    entry["callees"] = graph_info.get("callees", [])
+    entry["graph_distance"] = graph_info.get(
+        "graph_distance", {"to_entry_points": None}
     )
 
-    enriched_functions = []
+    # Model enrichment
+    prompt = model_prompt_function(entry)
+    model_result = run_model(pipe, [prompt])[0]
+    entry["summary"] = model_result.get("summary", "")
+    entry["change_recipe"] = model_result.get("change_recipe", "")
+    entry["confidence_score"] = float(model_result.get("confidence", 0.6))
+    entry["generated_at"] = datetime.utcnow().isoformat() + "Z"
 
-    # Traverse through the directory and find all .c files
-    for root, dirs, files in os.walk(repo_directory):
-        for file in files:
-            if file.endswith(".c"):
-                file_path = Path(root) / file
+    q.put(entry)
 
-                # Load parsed AST from jsonl
-                with open("parsed_functions.jsonl", "r") as f:
-                    for line in f:
-                        data = json.loads(line)
-                        if data["file_path"] == str(file_path):
-                            ast = data["ast"]
 
-                            # Placeholder for actual enrichment logic
-                            summary = summarizer(ast, max_length=100)[0]["summary_text"]
-                            intent = classifier(ast)[0]["label"]
-                            complexity = calculate_complexity(
-                                ast
-                            )  # Implement this function
+def process_file_entry(file_path: str, fn_entries: list, pipe) -> dict:
+    # Aggregate heuristics
+    file_loc = sum(fn.get("loc", 0) for fn in fn_entries)
+    file_cyclo = sum(fn.get("cyclomatic", 0) for fn in fn_entries)
+    file_tags = sorted({tag for fn in fn_entries for tag in fn.get("intent_tags", [])})
+    file_risks = " ".join(
+        fn.get("risk_notes", "") for fn in fn_entries if fn.get("risk_notes")
+    )
 
-                            enriched_data = {
-                                "file_name": file,
-                                "file_path": str(file_path),
-                                "ast": ast,
-                                "summary": summary,
-                                "intent": intent,
-                                "complexity": complexity,
-                            }
+    # Model prompt
+    prompt = model_prompt_file(file_path, fn_entries)
+    model_result = run_model(pipe, [prompt])[0]
 
-                            enriched_functions.append(enriched_data)
+    return {
+        "id": f"file:{file_path}",
+        "repo": str(Path.cwd().name),
+        "file_path": file_path,
+        "num_functions": len(fn_entries),
+        "loc": file_loc,
+        "cyclomatic": file_cyclo,
+        "intent_tags": file_tags,
+        "risk_notes": file_risks,
+        "summary": model_result.get("summary", ""),
+        "change_recipe": model_result.get("change_recipe", ""),
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "functions": [fn.get("id") for fn in fn_entries],
+    }
 
-    # Save the list of enriched functions to a jsonl file
-    with open("enriched_parsed.jsonl", "w") as f:
-        for entry in enriched_functions:
-            f.write(json.dumps(entry) + "\n")
+
+# ------------------------- main -------------------------
+def main():
+    if len(sys.argv) != 2:
+        print("Usage: python3 scripts/04_enrich_functions.py <repo_directory>")
+        sys.exit(1)
+    repo_dir = Path(sys.argv[1])
+
+    if not FUNCTIONS_PARSED.exists():
+        print(f"[ERROR] Parsed file not found: {FUNCTIONS_PARSED}")
+        sys.exit(1)
+    if not GRAPH_FUNCTIONS.exists():
+        print(f"[ERROR] Dependency graph not found: {GRAPH_FUNCTIONS}")
+        sys.exit(1)
+
+    with GRAPH_FUNCTIONS.open("r", encoding="utf-8") as f:
+        dep_graph = json.load(f)
+
+    enrich_functions(FUNCTIONS_PARSED, ENRICHED_OUTPUT, dep_graph)
+    print("[INFO] Enrichment finished successfully.")
 
 
 if __name__ == "__main__":
-    import sys
-
-    if len(sys.argv) != 2:
-        print("Usage: python3 scripts/03_enrich_with_model.py <repo_directory>")
-        sys.exit(1)
-
-    repo_directory = sys.argv[1]
-    enrich_with_model(repo_directory)
+    main()

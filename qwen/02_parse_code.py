@@ -23,7 +23,6 @@ import signal
 import subprocess
 import sys
 import threading
-import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
@@ -31,6 +30,7 @@ from typing import Dict, Iterable, List, Optional
 
 # Defaults
 DEFAULT_EXTENSIONS = [".c", ".h", ".asm"]
+INDEX_PATH = Path("data/file_index.jsonl")
 OUTPUT_PATH = Path("data/parsed_functions.jsonl")
 _TEMP_SUFFIX = ".tmp"
 
@@ -62,18 +62,6 @@ def parse_args(argv: Optional[List[str]] = None):
         nargs="+",
         default=DEFAULT_EXTENSIONS,
         help="File extensions to include (default: .c .h .asm).",
-    )
-    p.add_argument(
-        "--index",
-        type=Path,
-        default=None,
-        help="Optional JSONL index file containing file_path -> sha256 to reuse.",
-    )
-    p.add_argument(
-        "--output",
-        type=Path,
-        default=OUTPUT_PATH,
-        help=f"Output JSONL file (default: {OUTPUT_PATH})",
     )
     p.add_argument(
         "--workers",
@@ -487,7 +475,7 @@ def main(argv: Optional[List[str]] = None):
         )
         sys.exit(1)
 
-    hash_map = load_index_hashes(args.index) if args.index else {}
+    hash_map = load_index_hashes(INDEX_PATH) if INDEX_PATH else {}
 
     logging.info("Discovering files under %s ...", repo_dir)
     candidates = discover_files(repo_dir, args.extensions)
@@ -500,7 +488,7 @@ def main(argv: Optional[List[str]] = None):
 
     q: "queue.Queue[Optional[dict]]" = queue.Queue(maxsize=args.workers * 4)
     writer = threading.Thread(
-        target=writer_thread_fn, args=(args.output, q), daemon=True
+        target=writer_thread_fn, args=(OUTPUT_PATH, q), daemon=True
     )
     writer.start()
 
@@ -544,15 +532,15 @@ def main(argv: Optional[List[str]] = None):
         raise SystemExit(1)
 
     if _temp_output_path and Path(_temp_output_path).exists():
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        os.replace(str(_temp_output_path), str(args.output))
-        logging.info("Atomically moved temp %s -> %s", _temp_output_path, args.output)
+        OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+        os.replace(str(_temp_output_path), str(OUTPUT_PATH))
+        logging.info("Atomically moved temp %s -> %s", _temp_output_path, OUTPUT_PATH)
     else:
         logging.error("Temporary output missing; nothing to move.")
         raise SystemExit(1)
 
     sys.stderr.write("\n")
-    logging.info("Done: files=%d funcs=%d", total_files, funcs_written)
+    logging.info("Done: files=%d funcs=%d \n", total_files, funcs_written)
 
 
 if __name__ == "__main__":
