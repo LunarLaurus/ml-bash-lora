@@ -8,6 +8,7 @@ source "$SCRIPT_DIR/python_utils.sh"
 
 # Main menu
 while true; do
+    clear
     echo -e "\n${BGREEN}=== Git Repos Menu (pret: Gen I-IV mainline) ===${NC}"
     echo "1) List repos"
     echo "2) Clone a repo"

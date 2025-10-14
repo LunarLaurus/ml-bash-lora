@@ -6,6 +6,7 @@ source "$SCRIPT_DIR/install_cuda.sh"
 source "$SCRIPT_DIR/remove_cuda.sh"
 
 while true; do
+    clear
     echo -e "\n${BGREEN}=== CUDA Toolkit Menu ===${NC}"
     echo "1) Detect and select CUDA"
     echo "2) Install CUDA toolkit"
@@ -15,7 +16,7 @@ while true; do
     echo "6) NVCC Version"
     echo "7) Auto Detect NVCC"
     echo -e "${BRED}0) Back to Main Menu${NC}"
-
+    
     read -rp "Choice: " choice
     case $choice in
         1) select_and_persist_cuda ;;

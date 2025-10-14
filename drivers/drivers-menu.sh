@@ -19,6 +19,7 @@ show_nvidia_smi() {
 }
 
 while true; do
+    clear
     info "\n${BGREEN}=== NVIDIA Drivers Menu ===${NC}"
     info "1) Install/Update NVIDIA drivers"
     info "2) Show Nvidia-SMI"
