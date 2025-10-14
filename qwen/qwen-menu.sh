@@ -157,7 +157,10 @@ run_script() {
     fi
     
     info "Running Script: $adjusted_path for $CURRENT_REPO_PATH"
-    "$PYTHON_CMD" "$adjusted_path" "$CURRENT_REPO_PATH" "$@"
+    run_python_file "$adjusted_path" "$CURRENT_REPO_PATH" || {
+        error "Script execution failed"
+        return 1
+    }
 }
 
 # -------------------------
