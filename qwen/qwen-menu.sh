@@ -1,26 +1,16 @@
 #!/bin/bash
 source "$PROJECT_ROOT/helpers.sh"
 source "$PROJECT_ROOT/conda/conda-menu.sh"
-update_script_dir 2
 
 ensure_python_cmd || { info -e "${RED}Python not found for active environment. Activate/Create an Env. first.${NC}"; }
 select_project
 CURRENT_REPO_PATH=""
-
-update_script_dir() {
-    CURRENT_REPO_PATH="$1"
-}
 
 current_repo_path_check() {
     if [ -z "$CURRENT_REPO_PATH" ]; then
         echo "No repository selected. Please select a repository first."
         return 1
     fi
-}
-
-# Function to check if a command exists
-command_exists() {
-    command -v "$1" >/dev/null 2>&1
 }
 
 # Function to install dependencies for the current repo
@@ -54,14 +44,14 @@ select_project(){
         info "Cancelled"
         return 0
     fi
-    resolve_selection_to_folder "$REPO_SEL" || return 1
+    resolve_selection_to_folder "$REPO_CHOICE" || return 1
     ensure_python_cmd || { error "Python not found. Activate env first."; return 1; }
     # compute FOLDER_PATH if index selected
-    if [[ "$REPO_SEL" =~ ^[0-9]+$ ]]; then
-        FOLDER_PATH="$(repo_folder_from_url "${poke_repos_mainline[$REPO_SEL]}")"
+    if [[ "$REPO_CHOICE" =~ ^[0-9]+$ ]]; then
+        CURRENT_REPO_PATH="$(repo_folder_from_url "${poke_repos_mainline[$REPO_CHOICE]}")"
     fi
-    if [ -z "${FOLDER_PATH:-}" ]; then
-        FOLDER_PATH="$REPO_SEL"
+    if [ -z "${CURRENT_REPO_PATH:-}" ]; then
+        CURRENT_REPO_PATH="$REPO_CHOICE"
     fi
 }
 
@@ -70,33 +60,33 @@ while true; do
     clear
     echo "[qwen2.5-coder:7b] Lora System Script Menu"
     echo "-------------------------"
-    echo "1. 01_index_files.py"
-    echo "2. 02_parse_code.py"
-    echo "3. 02b_build_dependency_graphs.py"
-    echo "4. 03_enrich_with_model.py"
-    echo "5. 04_link_headers.py"
-    echo "6. 05_generate_qna.py"
-    echo "7. 06_train_lora.py"
-    echo "8. 07_embed_code.py"
-    echo "9. 08_query_system.py"
-    echo "10. 09_evaluate.py"
-    echo "11. Install Dependencies"
-    echo "12. Exit"
+    echo "1) Index Project Files "
+    echo "2) Parse Indexed Code"
+    echo "3) Build Dependency Graph"
+    echo "4) Enrich"
+    echo "5) Link Headers"
+    echo "6) Generate QNA"
+    echo "7) Train LoRA"
+    echo "8) Embed Code"
+    echo "9) Query System"
+    echo "10) Evaluate"
+    echo "21) Install Dependencies"
+    echo "0) Exit"
     read -p "Enter your choice [1-12]: " choice
     
     case $choice in
-        1) update_script_dir "$CURRENT_REPO_PATH"; run_script 01_index_files.py "$@" ;;
-        2) update_script_dir "$CURRENT_REPO_PATH"; run_script 02_parse_code.py "$@" ;;
-        3) update_script_dir "$CURRENT_REPO_PATH"; run_script 02b_build_dependency_graphs.py "$@" ;;
-        4) update_script_dir "$CURRENT_REPO_PATH"; run_script 03_enrich_with_model.py "$@" ;;
-        5) update_script_dir "$CURRENT_REPO_PATH"; run_script 04_link_headers.py "$@" ;;
-        6) update_script_dir "$CURRENT_REPO_PATH"; run_script 05_generate_qna.py "$@" ;;
-        7) update_script_dir "$CURRENT_REPO_PATH"; run_script 06_train_lora.py "$@" ;;
-        8) update_script_dir "$CURRENT_REPO_PATH"; run_script 07_embed_code.py "$@" ;;
-        9) update_script_dir "$CURRENT_REPO_PATH"; run_script 08_query_system.py "$@" ;;
-        10) update_script_dir "$CURRENT_REPO_PATH"; run_script 09_evaluate.py "$@" ;;
-        11) install_dependencies ;;
-        12) exit 0 ;;
+        1) run_script 01_index_files.py ;;
+        2) run_script 02_parse_code.py ;;
+        3) run_script 02b_build_dependency_graphs.py ;;
+        4) run_script 03_enrich_with_model.py ;;
+        5) run_script 04_link_headers.py ;;
+        6) run_script 05_generate_qna.py ;;
+        7) run_script 06_train_lora.py ;;
+        8) run_script 07_embed_code.py ;;
+        9) run_script 08_query_system.py ;;
+        10) run_script 09_evaluate.py ;;
+        21) install_dependencies ;;
+        0) exit 0 ;;
         *) echo "Invalid choice. Please try again." ;;
     esac
     
