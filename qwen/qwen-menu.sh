@@ -1,6 +1,6 @@
 #!/bin/bash
 source "$PROJECT_ROOT/helpers.sh"
-source "$PROJECT_ROOT/conda/conda-menu.sh"
+source "$PROJECT_ROOT/conda/env_manager.sh"
 
 ensure_python_cmd || { info -e "${RED}Python not found for active environment. Activate/Create an Env. first.${NC}"; }
 select_project
