@@ -222,8 +222,8 @@ list_lora_lib_versions() {
         error_no_env
         return 1
     fi
-    echo -e "${BCYAN}Checking LoRA/RAG packages in '$CURRENT_ENV':${NC}"
-    ensure_python_cmd || { echo -e "${RED}Python not found.${NC}"; return 1; }
+    info "${BCYAN}Checking LoRA/RAG packages in '$CURRENT_ENV':${NC}"
+    ensure_python_cmd || { error "${RED}Python not found.${NC}"; return 1; }
     
     "$PYTHON_CMD" - <<'PY'
 import importlib
@@ -254,8 +254,8 @@ list_rag_lib_versions() {
         error_no_env
         return 1
     fi
-    echo -e "${BCYAN}RAG-related package versions in '$CURRENT_ENV':${NC}"
-    ensure_python_cmd || { echo -e "${RED}Python not found.${NC}"; return 1; }
+    info "${BCYAN}RAG-related package versions in '$CURRENT_ENV':${NC}"
+    ensure_python_cmd || { error "${RED}Python not found.${NC}"; return 1; }
     
     "$PYTHON_CMD" - <<PY
 import importlib

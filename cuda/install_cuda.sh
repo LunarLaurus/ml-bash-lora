@@ -9,11 +9,11 @@ NVIDIA_REPO_URL="https://developer.download.nvidia.com/compute/cuda/repos/ubuntu
 # Ensure NVIDIA CUDA repo exists
 # ------------------------------
 ensure_nvidia_repo() {
-    echo -e "${GREEN}Checking NVIDIA CUDA repository...${NC}"
+    info "${GREEN}Checking NVIDIA CUDA repository...${NC}"
 
     # If repo not found in apt sources, add it
     if ! grep -Rq "developer.download.nvidia.com" /etc/apt/sources.list*; then
-        echo -e "${YELLOW}NVIDIA CUDA repo not found. Adding it...${NC}"
+        info "${YELLOW}NVIDIA CUDA repo not found. Adding it...${NC}"
 
         # Install prerequisite for add-apt-repository
         sudo apt-get update
@@ -36,11 +36,11 @@ https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/ /" \
 
     # Test if repo is reachable
     if ! curl -s --head --fail "$NVIDIA_REPO_URL" >/dev/null; then
-        echo -e "${YELLOW}⚠ NVIDIA repo is not reachable.${NC}"
+        warn "${YELLOW}⚠ NVIDIA repo is not reachable.${NC}"
         return 1
     fi
 
-    echo -e "${GREEN}NVIDIA repo is valid and reachable.${NC}"
+    info "${GREEN}NVIDIA repo is valid and reachable.${NC}"
 }
 
 # ------------------------------
@@ -60,19 +60,19 @@ list_available_cuda_versions() {
     unset IFS
 
     # Show detected versions
-    echo -e "\n${GREEN}Detected CUDA versions from apt:${NC}"
+    info "\n${GREEN}Detected CUDA versions from apt:${NC}"
     if [ "${#detected_versions[@]}" -eq 0 ]; then
-        echo "  (none detected via apt-cache)"
+        info "  (none detected via apt-cache)"
     else
         for v in "${detected_versions[@]}"; do
-            echo "  - $v"
+            info "  - $v"
         done
     fi
 
     # Show default supported versions
-    echo -e "\n${GREEN}Default supported CUDA versions:${NC}"
+    info "\n${GREEN}Default supported CUDA versions:${NC}"
     for s in "${CUDA_SUPPORTED[@]}"; do
-        echo "  - $s"
+        info "  - $s"
     done
 
     # Ask if user wants to override default list
@@ -95,12 +95,12 @@ list_available_cuda_versions() {
     fi
 
     # Show final available list
-    echo -e "\n${GREEN}Final available CUDA versions:${NC}"
+    info "\n${GREEN}Final available CUDA versions:${NC}"
     if [ "${#versions[@]}" -eq 0 ]; then
-        echo "  (none available)"
+        info "  (none available)"
     else
         for v in "${versions[@]}"; do
-            echo "  - $v"
+            info "  - $v"
         done
     fi
 }
@@ -112,10 +112,10 @@ install_cuda() {
     ensure_nvidia_repo || return 1
 
 	list_available_cuda_versions
-    echo -e "${GREEN}Suggested CUDA versions for optimal PyTorch compatibility:${NC}"
-    echo " - 12.9 / 12.8 / 12.6 / 12.4 / 12.3 / 12.2 / 12.1: Recent GPUs & recent PyTorch builds"
-    echo " - 11.8: Maximum compatibility for older PyTorch releases / older toolchains"
-    echo "Supported: ${CUDA_SUPPORTED[*]}"
+    info "${GREEN}Suggested CUDA versions for optimal PyTorch compatibility:${NC}"
+    info " - 12.9 / 12.8 / 12.6 / 12.4 / 12.3 / 12.2 / 12.1: Recent GPUs & recent PyTorch builds"
+    info " - 11.8: Maximum compatibility for older PyTorch releases / older toolchains"
+    info "Supported: ${CUDA_SUPPORTED[*]}"
     read -rp "Enter desired CUDA version (major.minor) [12.2]: " CUDA_INPUT
     CUDA_INPUT=${CUDA_INPUT:-12.2}
 
@@ -124,25 +124,25 @@ install_cuda() {
 
     # Validate version
     if ! [[ " ${CUDA_SUPPORTED[*]} " =~ " ${CUDA_INPUT} " ]]; then
-        echo -e "${YELLOW}Requested version '$CUDA_INPUT' not in supported list. Defaulting to 12.2.${NC}"
+        warn "${YELLOW}Requested version '$CUDA_INPUT' not in supported list. Defaulting to 12.2.${NC}"
         CUDA_INPUT="12.2"
     fi
 
     pkg_ver="${CUDA_INPUT//./-}"
     cuda_pkg="cuda-${pkg_ver}"
 
-    echo -e "${GREEN}Installing CUDA package: $cuda_pkg${NC}"
+    info "${GREEN}Installing CUDA package: $cuda_pkg${NC}"
     sudo apt-get install -y "$cuda_pkg" || {
-        echo -e "${YELLOW}Initial install failed; retrying with -f install...${NC}"
+        warn "${YELLOW}Initial install failed; retrying with -f install...${NC}"
         sudo apt-get -f install -y
         sudo apt-get install -y "$cuda_pkg" || {
-            echo -e "${RED}Failed to install $cuda_pkg.${NC}"
+            error "${RED}Failed to install $cuda_pkg.${NC}"
             return 1
         }
     }
     update_torch_index_url
 
-    echo -e "${GREEN}CUDA $CUDA_INPUT installed successfully.${NC}"
-	echo -e "${GREEN}Run detect_cuda to select and persist this installation.${NC}"
+    info "${GREEN}CUDA $CUDA_INPUT installed successfully.${NC}"
+	info "${GREEN}Run detect_cuda to select and persist this installation.${NC}"
 
 }

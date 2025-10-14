@@ -9,7 +9,7 @@ remove_cuda_version() {
     _build_version_map
 
     if [ "${#CUDA_MAP[@]}" -eq 0 ]; then
-        echo -e "${RED}No CUDA installations found on disk.${NC}"
+        error "${RED}No CUDA installations found on disk.${NC}"
         return 1
     fi
 
@@ -19,7 +19,7 @@ remove_cuda_version() {
     CUDA_MAP_SORTED=("${sorted[@]}")
 
     # Show installations
-    echo -e "${GREEN}Installed CUDA versions:${NC}"
+    info "${GREEN}Installed CUDA versions:${NC}"
     local i=1
     for entry in "${CUDA_MAP_SORTED[@]}"; do
         ver="${entry%%|*}"
@@ -34,7 +34,7 @@ remove_cuda_version() {
 
     for c in "${choice_arr[@]}"; do
         if ! [[ "$c" =~ ^[0-9]+$ ]] || [ "$c" -lt 1 ] || [ "$c" -gt "${#CUDA_MAP_SORTED[@]}" ]; then
-            echo -e "${YELLOW}Skipping invalid choice: $c${NC}"
+            warn "${YELLOW}Skipping invalid choice: $c${NC}"
             continue
         fi
 
@@ -42,7 +42,7 @@ remove_cuda_version() {
         ver="${selected%%|*}"
         path="${selected#*|}"
 
-        echo -e "${YELLOW}Removing CUDA $ver at $path ...${NC}"
+        warn "${YELLOW}Removing CUDA $ver at $path ...${NC}"
         sudo rm -rf "$path"
 
         # Check if /usr/local/cuda points here, remove link if so
@@ -55,7 +55,7 @@ remove_cuda_version() {
         fi
     done
 
-    echo -e "${GREEN}CUDA removal complete.${NC}"
+    info "${GREEN}CUDA removal complete.${NC}"
 }
 remove_obsolete_cuda_versions() {
     # Detect installed CUDA versions
@@ -63,7 +63,7 @@ remove_obsolete_cuda_versions() {
     _build_version_map
 
     if [ "${#CUDA_MAP[@]}" -eq 0 ]; then
-        echo -e "${RED}No CUDA installations found on disk.${NC}"
+        error "${RED}No CUDA installations found on disk.${NC}"
         return 1
     fi
 
@@ -77,7 +77,7 @@ remove_obsolete_cuda_versions() {
     latest_ver="${latest%%|*}"
     latest_path="${latest#*|}"
 
-    echo -e "${GREEN}Latest CUDA version will be kept: ${latest_ver} -> ${latest_path}${NC}"
+    info "${GREEN}Latest CUDA version will be kept: ${latest_ver} -> ${latest_path}${NC}"
 
     # Remove all except latest
     for ((i=0; i<${#CUDA_MAP_SORTED[@]}-1; i++)); do
@@ -85,7 +85,7 @@ remove_obsolete_cuda_versions() {
         ver="${entry%%|*}"
         path="${entry#*|}"
 
-        echo -e "${YELLOW}Removing obsolete CUDA $ver at $path ...${NC}"
+        info "${YELLOW}Removing obsolete CUDA $ver at $path ...${NC}"
         sudo rm -rf "$path"
 
         # Remove /usr/local/cuda symlink if it points to this version
@@ -98,5 +98,5 @@ remove_obsolete_cuda_versions() {
         fi
     done
 
-    echo -e "${GREEN}Obsolete CUDA versions removed. Latest version ${latest_ver} retained.${NC}"
+    info "${GREEN}Obsolete CUDA versions removed. Latest version ${latest_ver} retained.${NC}"
 }

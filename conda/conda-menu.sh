@@ -12,11 +12,11 @@ source "$SCRIPT_DIR/env_manager.sh"
 # ------------------------------
 
 env_disk_usage() {
-    echo -e "${GREEN}Disk usage of Conda environments:${NC}"
-    du -sh $HOME/miniforge/envs/* 2>/dev/null || echo -e "${YELLOW}No conda envs found or du failed.${NC}"
+    info "${GREEN}Disk usage of Conda environments:${NC}"
+    du -sh $HOME/miniforge/envs/* 2>/dev/null || warn "${YELLOW}No conda envs found or du failed.${NC}"
 }
 
-ensure_python_cmd || { echo -e "${RED}Python not found for active environment. Activate/Create an Env. first.${NC}"; }
+ensure_python_cmd || { warn "${RED}Python not found for active environment. Activate/Create an Env. first.${NC}"; }
 
 while true; do
     echo -e "\n${BCYAN}=== Conda / ML Environment Menu ===${NC}"

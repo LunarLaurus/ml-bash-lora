@@ -33,7 +33,7 @@ detect_cuda() {
         echo
         show_nvcc_version
     else
-        echo -e "${RED}nvcc not found in PATH after selection.${NC}"
+        error "${RED}nvcc not found in PATH after selection.${NC}"
     fi
 }
 
@@ -43,7 +43,7 @@ check_existing_cuda() {
         local cur_target
         cur_target="$(readlink -f /usr/local/cuda 2>/dev/null || true)"
         if [ -n "$cur_target" ] && [ -x "$cur_target/bin/nvcc" ]; then
-            echo -e "${GREEN}Using existing persisted CUDA at $cur_target${NC}"
+            info "${GREEN}Using existing persisted CUDA at $cur_target${NC}"
             export CUDA_PATH="$cur_target"
             export CUDA_VER="$("$cur_target/bin/nvcc" --version | grep -oP 'release \K[0-9]+\.[0-9]+')"
             export PATH="$CUDA_PATH/bin:$PATH"
@@ -85,13 +85,13 @@ detect_cuda_list() {
 list_cuda_installations() {
     detect_cuda_list
     if [ "${#CUDA_CANDIDATES[@]}" -eq 0 ]; then
-        echo -e "${RED}No CUDA installations found.${NC}"
+        error "${RED}No CUDA installations found.${NC}"
         return 0
     fi
 
     _build_version_map
 
-    echo -e "${GREEN}Found CUDA installations:${NC}"
+    info "${GREEN}Found CUDA installations:${NC}"
     # sort by version (semantic sort -V) and print
     IFS=$'\n' sorted=($(printf '%s\n' "${CUDA_MAP[@]}" | sort -t'|' -k1,1 -V))
     local i=1
@@ -112,11 +112,11 @@ list_cuda_candidates() {
     _build_version_map
 
     if [ "${#CUDA_MAP[@]}" -eq 0 ]; then
-        echo -e "${YELLOW}No CUDA installations found on disk.${NC}"
+        warn "${YELLOW}No CUDA installations found on disk.${NC}"
         return 1
     fi
 
-    echo -e "${GREEN}Detected CUDA installations:${NC}"
+    info "${GREEN}Detected CUDA installations:${NC}"
     IFS=$'\n' sorted=($(printf '%s\n' "${CUDA_MAP[@]}" | sort -t'|' -k1,1 -V))
     CUDA_MAP_SORTED=("${sorted[@]}")
     local i=1
@@ -138,7 +138,7 @@ select_and_persist_cuda() {
         choice_index=$default_index
     else
         if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt "${#CUDA_MAP_SORTED[@]}" ]; then
-            echo -e "${YELLOW}Invalid choice, using default.${NC}"
+            warn "${YELLOW}Invalid choice, using default.${NC}"
             choice_index=$default_index
         else
             choice_index=$choice
@@ -164,7 +164,7 @@ select_and_persist_cuda() {
 		source /etc/profile.d/cuda.sh
 	fi
 
-    echo -e "${GREEN}CUDA ${CUDA_VER} selected and persisted.${NC}"
+    info "${GREEN}CUDA ${CUDA_VER} selected and persisted.${NC}"
 }
 
 # Quick helper: ensure a valid CUDA is selected and persist it if missing from PATH.
@@ -172,7 +172,7 @@ select_and_persist_cuda() {
 ensure_cuda_in_path_and_persist() {
     # run detection/selection if nvcc not in PATH
     if ! command -v nvcc &>/dev/null; then
-        echo -e "${YELLOW}nvcc not found in PATH. Running detection...${NC}"
+        warn "${YELLOW}nvcc not found in PATH. Running detection...${NC}"
         detect_cuda
         return $?
     fi
@@ -184,19 +184,19 @@ ensure_cuda_in_path_and_persist() {
     if [ -L /usr/local/cuda ]; then
         cur_target="$(readlink -f /usr/local/cuda 2>/dev/null || true)"
         if [[ "$nvcc_real" == "$cur_target"* ]]; then
-            echo -e "${GREEN}nvcc already resolves to /usr/local/cuda installation.${NC}"
+            info "${GREEN}nvcc already resolves to /usr/local/cuda installation.${NC}"
             return 0
         fi
     fi
 
-    echo -e "${YELLOW}nvcc found at: $nvcc_path${NC}"
+    info "${YELLOW}nvcc found at: $nvcc_path${NC}"
     read -rp "Set /usr/local/cuda to this nvcc's parent and persist env? [y/N]: " ans
     if [[ "$ans" =~ ^[Yy]$ ]]; then
         cuda_root="$(dirname "$(dirname "$nvcc_real")")"
         echo "Linking /usr/local/cuda -> $cuda_root"
         sudo ln -sfn "$cuda_root" /usr/local/cuda
         set_cuda_env_persistent "$cuda_root"
-        echo -e "${GREEN}Done. Re-login for persistent env to take effect.${NC}"
+        info "${GREEN}Done. Re-login for persistent env to take effect.${NC}"
     else
         echo "No changes made."
     fi
@@ -217,7 +217,7 @@ export LD_LIBRARY_PATH=\"\$CUDA_PATH/lib64:\${LD_LIBRARY_PATH:-}\"
     if ! grep -q "## CUDA environment - auto-generated" "$rc" 2>/dev/null; then
         printf "\n## CUDA environment - auto-generated\n" >> "$rc"
         printf '%s\n' "$content" >> "$rc"
-        echo -e "${GREEN}Appended CUDA env to $rc (applies at next login).${NC}"
+        info "${GREEN}Appended CUDA env to $rc (applies at next login).${NC}"
     fi
 
     # Apply immediately to current shell (works for normal user)
@@ -225,7 +225,7 @@ export LD_LIBRARY_PATH=\"\$CUDA_PATH/lib64:\${LD_LIBRARY_PATH:-}\"
     export PATH="$CUDA_PATH/bin:$PATH"
     export LD_LIBRARY_PATH="$CUDA_PATH/lib64:${LD_LIBRARY_PATH:-}"
     update_torch_index_url
-    echo -e "${GREEN}CUDA environment variables set in current shell.${NC}"
+    info "${GREEN}CUDA environment variables set in current shell.${NC}"
 }
 
 # Interactively select CUDA (if >1), default to highest when Enter pressed
@@ -237,12 +237,12 @@ detect_cuda_select() {
 
     # If CUDA already persisted and valid, skip selection
     if check_existing_cuda; then
-        echo -e "${GREEN}Existing CUDA installation detected; skipping selection.${NC}"
+        info "${GREEN}Existing CUDA installation detected; skipping selection.${NC}"
         return 0
     fi
 
     if [ "${#CUDA_MAP[@]}" -eq 0 ]; then
-        echo -e "${RED}No CUDA installations found on disk.${NC}"
+        error "${RED}No CUDA installations found on disk.${NC}"
         CUDA_VER=""
         CUDA_PATH=""
         return 1
@@ -260,7 +260,7 @@ detect_cuda_select() {
     highest_path="${highest#*|}"
 
     # Display available installations
-    echo -e "${GREEN}Detected CUDA installations:${NC}"
+    info "${GREEN}Detected CUDA installations:${NC}"
     local i=1
     for entry in "${CUDA_MAP_SORTED[@]}"; do
         ver="${entry%%|*}"
@@ -278,7 +278,7 @@ detect_cuda_select() {
     if [ -z "$choice" ]; then
         choice_index=$default_index
     elif ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt "${#CUDA_MAP_SORTED[@]}" ]; then
-        echo -e "${YELLOW}Invalid choice, using default.${NC}"
+        warn "${YELLOW}Invalid choice, using default.${NC}"
         choice_index=$default_index
     else
         choice_index=$choice
@@ -301,7 +301,7 @@ detect_cuda_select() {
     # Persist environment
     set_cuda_env_persistent "$CUDA_PATH"
 
-    echo -e "${GREEN}CUDA ${CUDA_VER} selected and persisted.${NC}"
+    info "${GREEN}CUDA ${CUDA_VER} selected and persisted.${NC}"
 }
 
 
@@ -312,10 +312,10 @@ detect_cuda_select() {
 show_nvcc_version() {
 	auto_detect_nvcc
     if ! command -v nvcc &>/dev/null; then
-        echo -e "${RED}CUDA compiler (nvcc) not found.${NC}"
+        error "${RED}CUDA compiler (nvcc) not found.${NC}"
         return 1
     fi
-    echo -e "${GREEN}nvcc / CUDA version:${NC}"
+    info "${GREEN}nvcc / CUDA version:${NC}"
     nvcc --version
 }
 
@@ -326,7 +326,7 @@ auto_detect_nvcc() {
 
         # If CUDA already set and matches detected nvcc, skip prompting
         if [ -n "${CUDA_PATH:-}" ] && [ "$(readlink -f "$CUDA_PATH")" = "$nvcc_dir" ]; then
-            echo -e "${GREEN}Detected nvcc matches current CUDA_PATH (${CUDA_PATH}). No change.${NC}"
+            info "${GREEN}Detected nvcc matches current CUDA_PATH (${CUDA_PATH}). No change.${NC}"
             return 0
         fi
 
@@ -336,9 +336,9 @@ auto_detect_nvcc() {
             CUDA_VER="$("$CUDA_PATH/bin/nvcc" --version | grep -oP 'release \K[0-9]+\.[0-9]+')"
             # sudo ln -sfn "$CUDA_PATH" /usr/local/cuda
             set_cuda_env_persistent "$CUDA_PATH"
-            echo -e "${GREEN}CUDA ${CUDA_VER} persisted.${NC}"
+            info "${GREEN}CUDA ${CUDA_VER} persisted.${NC}"
         fi
     else
-        echo -e "${YELLOW}nvcc not found in PATH.${NC}"
+        info "${YELLOW}nvcc not found in PATH.${NC}"
     fi
 }
