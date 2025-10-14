@@ -10,6 +10,8 @@ Enrich function-level and file-level JSONL for LoRA training.
 - Groups functions per file to build file-level summaries
 - Uses Salesforce/codet5-small for model-based summarization
 - Outputs a single enriched JSONL
+- Async batching on GPU with full FP32
+- Ctrl+C safe
 """
 
 import json
@@ -19,17 +21,21 @@ import queue
 import logging
 from pathlib import Path
 from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import re
 from tqdm import tqdm
 import torch
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
 
+# ------------------------- config -------------------------
 FUNCTIONS_PARSED = Path("data/parsed_functions.jsonl")
 GRAPH_FUNCTIONS = Path("data/dep_graph_functions.jsonl")
 ENRICHED_OUTPUT = Path("data/enriched_functions.jsonl")
-MAX_TOKENS = 512  # approximate token limit for codet5-small
-BATCH_SIZE = 16  # batch size for GPU inference
+
+MAX_TOKENS = 512
+BATCH_SIZE = 32  # can adjust dynamically for your GPU
+_input_queue = queue.Queue(maxsize=BATCH_SIZE * 2)
+_output_queue = queue.Queue(maxsize=BATCH_SIZE * 2)
+_shutdown = threading.Event()
 
 # ------------------------- heuristics -------------------------
 CALL_SITE_REGEX = re.compile(r"\b([A-Za-z_]\w*)\s*\(")
@@ -118,7 +124,6 @@ def load_model():
 
 
 def chunk_text(text: str, max_tokens: int = MAX_TOKENS) -> str:
-    """Truncate text to approximately max_tokens words."""
     words = text.split()
     if len(words) <= max_tokens:
         return text
@@ -150,10 +155,10 @@ Content:
 {pseudo_body}"""
 
 
-def batch_run_model(pipe, prompts: list, batch_size: int = BATCH_SIZE) -> list:
+def batch_run_model(pipe, prompts: list) -> list:
     results = []
-    for i in range(0, len(prompts), batch_size):
-        batch = prompts[i : i + batch_size]
+    for i in range(0, len(prompts), BATCH_SIZE):
+        batch = prompts[i : i + BATCH_SIZE]
         outputs = pipe(batch)
         for out in outputs:
             text = out.get("generated_text", "")
@@ -171,98 +176,105 @@ def batch_run_model(pipe, prompts: list, batch_size: int = BATCH_SIZE) -> list:
     return results
 
 
-# ------------------------- threading writer -------------------------
-_shutdown = threading.Event()
+# ------------------------- async GPU worker -------------------------
+def gpu_worker(pipe):
+    """Continuously process prompts from _input_queue in batches."""
+    while not _shutdown.is_set():
+        batch = []
+        entries = []
+        while len(batch) < BATCH_SIZE:
+            try:
+                entry, prompt = _input_queue.get(timeout=0.5)
+                batch.append(prompt)
+                entries.append(entry)
+                _input_queue.task_done()
+            except queue.Empty:
+                break
+        if not batch:
+            continue
+
+        batch_results = batch_run_model(pipe, batch)
+        for entry, res in zip(entries, batch_results):
+            entry["summary"] = res.get("summary", "")
+            entry["change_recipe"] = res.get("change_recipe", "")
+            entry["confidence_score"] = float(res.get("confidence", 0.6))
+            entry["generated_at"] = datetime.utcnow().isoformat() + "Z"
+            _output_queue.put(entry)
 
 
+# ------------------------- writer thread -------------------------
 def writer_thread(output_path: Path, q: "queue.Queue[dict]"):
     tmp_path = output_path.with_suffix(output_path.suffix + ".tmp")
     tmp_path.parent.mkdir(parents=True, exist_ok=True)
     written = 0
-    with tmp_path.open("w", encoding="utf-8") as f:
-        while not _shutdown.is_set():
-            try:
-                item = q.get(timeout=0.5)
-            except queue.Empty:
-                continue
-            if item is None:
-                break
+    while not _shutdown.is_set():
+        try:
+            item = q.get(timeout=0.5)
+        except queue.Empty:
+            continue
+        if item is None:
+            break
+        with tmp_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(item, ensure_ascii=False) + "\n")
-            written += 1
-            q.task_done()
+        written += 1
+        q.task_done()
     tmp_path.replace(output_path)
     logging.info("Wrote %d entries to %s", written, output_path)
 
 
-# ------------------------- enrichment -------------------------
-def enrich_functions(parsed_path: Path, output_path: Path, dep_graph: dict):
-    logging.info("Starting function enrichment...")
-    pipe = load_model()
-
-    entries: list[dict] = []
-    with parsed_path.open("r", encoding="utf-8") as f:
-        for ln in f:
-            ln = ln.strip()
-            if ln:
-                entries.append(json.loads(ln))
-    logging.info("Loaded %d parsed functions.", len(entries))
+# ------------------------- main async enrichment -------------------------
+def enrich_functions_async(parsed_path: Path, output_path: Path, dep_graph: dict, pipe):
+    entries = [
+        json.loads(l) for l in parsed_path.read_text(encoding="utf-8").splitlines() if l
+    ]
 
     files_map = {}
     for entry in entries:
         file_path = entry["file_path"]
         files_map.setdefault(file_path, []).append(entry)
 
-    q: "queue.Queue[dict]" = queue.Queue(maxsize=32)
-    writer = threading.Thread(target=writer_thread, args=(output_path, q), daemon=True)
+    gpu_thread = threading.Thread(target=gpu_worker, args=(pipe,), daemon=True)
+    gpu_thread.start()
+
+    writer = threading.Thread(
+        target=writer_thread, args=(output_path, _output_queue), daemon=True
+    )
     writer.start()
 
-    logging.info("Processing functions with ThreadPoolExecutor...")
+    # Fill input queue with per-function prompts and enrich heuristics
+    for entry in entries:
+        fn = entry.get("function", {})
+        body = fn.get("body") or ""
+        suffix = Path(entry.get("file_path", "")).suffix.lower()
 
-    # Prepare prompts and process in batches
-    prompts = []
-    futures_map = {}
-    with ThreadPoolExecutor() as exc:
-        for entry in entries:
-            fn_prompt = model_prompt_function(entry)
-            prompts.append(fn_prompt)
-            futures_map[fn_prompt] = entry
+        entry["loc"] = count_loc(body)
+        entry["cyclomatic"] = naive_cyclomatic(body)
+        entry["calls"] = CALL_SITE_REGEX.findall(body)
+        entry["intent_tags"] = detect_intent_tags(body, suffix)
+        entry["risk_notes"] = naive_risk_notes(body, suffix)
+        key = entry.get("id")
+        graph_info = dep_graph.get(key, {})
+        entry["callers"] = graph_info.get("callers", [])
+        entry["callees"] = graph_info.get("callees", [])
+        entry["graph_distance"] = graph_info.get(
+            "graph_distance", {"to_entry_points": None}
+        )
 
-        # Process in batches
-        for i in tqdm(range(0, len(prompts), BATCH_SIZE), desc="Function batches"):
-            batch_prompts = prompts[i : i + BATCH_SIZE]
-            batch_results = batch_run_model(pipe, batch_prompts)
-            for j, res in enumerate(batch_results):
-                entry = futures_map[batch_prompts[j]]
-                entry["summary"] = res.get("summary", "")
-                entry["change_recipe"] = res.get("change_recipe", "")
-                entry["confidence_score"] = float(res.get("confidence", 0.6))
-                entry["generated_at"] = datetime.utcnow().isoformat() + "Z"
+        prompt = model_prompt_function(entry)
+        _input_queue.put((entry, prompt))
 
-                fn = entry.get("function", {})
-                body = fn.get("body") or ""
-                suffix = Path(entry.get("file_path", "")).suffix.lower()
-                entry["loc"] = count_loc(body)
-                entry["cyclomatic"] = naive_cyclomatic(body)
-                entry["calls"] = CALL_SITE_REGEX.findall(body)
-                entry["intent_tags"] = detect_intent_tags(body, suffix)
-                entry["risk_notes"] = naive_risk_notes(body, suffix)
+    # Wait for function processing
+    _input_queue.join()
+    _shutdown.set()
+    gpu_thread.join()
 
-                key = entry.get("id")
-                graph_info = dep_graph.get(key, {})
-                entry["callers"] = graph_info.get("callers", [])
-                entry["callees"] = graph_info.get("callees", [])
-                entry["graph_distance"] = graph_info.get(
-                    "graph_distance", {"to_entry_points": None}
-                )
-
-                q.put(entry)
-
-    logging.info("Processing file-level summaries...")
+    # Process file-level summaries
     for file_path, fn_entries in tqdm(
         files_map.items(), total=len(files_map), desc="Files"
     ):
         file_prompt = model_prompt_file(file_path, fn_entries)
         file_res = batch_run_model(pipe, [file_prompt])[0]
+
         file_entry = {
             "id": f"file:{file_path}",
             "repo": str(Path.cwd().name),
@@ -281,9 +293,9 @@ def enrich_functions(parsed_path: Path, output_path: Path, dep_graph: dict):
             "generated_at": datetime.utcnow().isoformat() + "Z",
             "functions": [fn.get("id") for fn in fn_entries],
         }
-        q.put(file_entry)
+        _output_queue.put(file_entry)
 
-    q.put(None)
+    _output_queue.put(None)
     writer.join()
     logging.info("Enrichment completed successfully.")
 
@@ -318,13 +330,12 @@ def main():
                 dep_graph[key] = obj
 
     try:
-        enrich_functions(FUNCTIONS_PARSED, ENRICHED_OUTPUT, dep_graph)
+        pipe = load_model()
+        enrich_functions_async(FUNCTIONS_PARSED, ENRICHED_OUTPUT, dep_graph, pipe)
     except KeyboardInterrupt:
         logging.warning("KeyboardInterrupt received! Shutting down...")
         _shutdown.set()
-        # Give writer a chance to exit
-        queue_obj = queue.Queue()
-        queue_obj.put(None)
+        _output_queue.put(None)
 
 
 if __name__ == "__main__":
