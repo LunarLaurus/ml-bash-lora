@@ -2,8 +2,6 @@
 source "$PROJECT_ROOT/helpers.sh"
 source "$PROJECT_ROOT/conda/env_manager.sh"
 
-ensure_python_cmd || { info -e "${RED}Python not found for active environment. Activate/Create an Env. first.${NC}"; }
-select_project
 CURRENT_REPO_PATH=""
 
 current_repo_path_check() {
@@ -55,6 +53,8 @@ select_project(){
     fi
 }
 
+ensure_python_cmd || { info -e "${RED}Python not found for active environment. Activate/Create an Env. first.${NC}"; }
+select_project
 # Main menu loop
 while true; do
     clear
