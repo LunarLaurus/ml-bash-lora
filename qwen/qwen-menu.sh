@@ -1,49 +1,62 @@
 #!/bin/bash
+set -euo pipefail
+
+# -------------------------
+# Source helpers
+# -------------------------
 source "$PROJECT_ROOT/helpers.sh"
 source "$PROJECT_ROOT/conda/env_manager.sh"
 source "$PROJECT_ROOT/git/git_data.sh"
 source "$PROJECT_ROOT/git/git_utils.sh"
 source "$PROJECT_ROOT/git/python_utils.sh"
 
+# -------------------------
+# Globals
+# -------------------------
 CURRENT_REPO_PATH=""
 DATA_DIR="data"
 
+# -------------------------
+# Check repo selected
+# -------------------------
 current_repo_path_check() {
     if [ -z "$CURRENT_REPO_PATH" ]; then
-        echo -e "${BRED}No repository selected. Please select a repository first.${NC}"
+        error "No repository selected. Please select a repository first."
         return 1
     fi
 }
 
 # -------------------------
-# Remove all .jsonl files in repo-specific data dir
+# Ensure data dir exists
+# -------------------------
+ensure_repo_data_dir() {
+    if ! current_repo_path_check; then return 1; fi
+    local dir="$CURRENT_REPO_PATH/$DATA_DIR"
+    mkdir -p "$dir"
+}
+
+# -------------------------
+# Cleanup repo-specific JSONL
 # -------------------------
 cleanup_jsonl() {
-    if ! current_repo_path_check; then return 1; fi
-    local repo_data_dir="${CURRENT_REPO_PATH}/${DATA_DIR}"
-    if [ -d "$repo_data_dir" ]; then
-        echo "Removing all .jsonl files in $repo_data_dir..."
-        find "$repo_data_dir" -type f -name "*.jsonl" -exec rm -f {} +
-        echo "Done."
-    else
-        echo "Directory $repo_data_dir does not exist."
-    fi
+    ensure_repo_data_dir
+    warn "Removing all .jsonl files in $CURRENT_REPO_PATH/$DATA_DIR ..."
+    find "$CURRENT_REPO_PATH/$DATA_DIR" -type f -name "*.jsonl" -exec rm -f {} +
+    info "Done."
 }
 
 # -------------------------
 # Check if a file exists in repo-specific data dir
 # -------------------------
 check_file() {
-    if ! current_repo_path_check; then return 1; fi
+    ensure_repo_data_dir
     local file="$1"
-    local repo_data_dir="${CURRENT_REPO_PATH}/${DATA_DIR}"
-    
     if [ -z "$file" ]; then
         echo "Usage: check_file <filename>"
         return 1
     fi
     
-    if [ -f "$repo_data_dir/$file" ]; then
+    if [ -f "$CURRENT_REPO_PATH/$DATA_DIR/$file" ]; then
         echo "ok"
         return 0
     else
@@ -53,17 +66,17 @@ check_file() {
 }
 
 # -------------------------
-# Install dependencies for current repo
+# Install dependencies
 # -------------------------
 install_dependencies() {
-    if ! current_repo_path_check; then return 1; fi
-    ensure_python_cmd || { echo -e "${RED}Python not found. Activate env first.${NC}"; return 1; }
+    ensure_repo_data_dir
+    ensure_python_cmd || { error "Python not found. Activate env first."; return 1; }
     
     check_python_deps numpy torch torchvision torchaudio transformers datasets peft tqdm numpy scipy sklearn tiktoken google.protobuf bitsandbytes accelerate safetensors
     if [ ${#MISSING_PY_DEPS[@]} -gt 0 ]; then
-        warn "${BRED}Missing Python dependencies: ${MISSING_PY_DEPS[*]}${NC}"
+        warn "Missing Python dependencies: ${MISSING_PY_DEPS[*]}"
         auto_install_python_deps || {
-            error "${BRED}Automatic installation failed. Install manually: pip install ${MISSING_PY_DEPS[*]}${NC}"
+            error "Automatic installation failed. Install manually: pip install ${MISSING_PY_DEPS[*]}"
             return 1
         }
         info "${BGREEN}Dependencies installed successfully.${NC}"
@@ -71,57 +84,57 @@ install_dependencies() {
 }
 
 # -------------------------
-# Run a script with CURRENT_REPO_PATH as first argument
-# Optional: check for input file in repo data dir
+# Run a Python script with repo context
+# Optional: $2 is expected input file in repo data dir
 # -------------------------
 run_script() {
     local script_path="$1"
-    local expected_input="${2-}"
-    
+    local expected_input="${2:-}"
     shift
-    if [ -n "$expected_input" ]; then
-        shift  # only shift $2 if it exists
-    fi
+    [ -n "$expected_input" ] && shift
     
-    if ! current_repo_path_check; then
-        return 1
-    fi
+    current_repo_path_check || return 1
     
     if [ -n "$expected_input" ]; then
         if ! check_file "$expected_input"; then
-            echo -e "${BRED}Required input '$expected_input' missing in ${CURRENT_REPO_PATH}/${DATA_DIR}. Aborting.${NC}"
+            error "Required input '$expected_input' missing in ${CURRENT_REPO_PATH}/${DATA_DIR}. Aborting."
             return 1
         fi
     fi
     
+    ensure_repo_data_dir
     info "Running Script: $script_path for $CURRENT_REPO_PATH"
     "$PYTHON_CMD" "$script_path" "$CURRENT_REPO_PATH" "$@"
 }
 
-
 # -------------------------
-# Project selection
+# Select project
 # -------------------------
 select_project() {
-    if ! prompt_repo_selection; then
-        info "Cancelled"
+    prompt_repo_selection || { info "Cancelled"; return 1; }
+    
+    # REPO_SEL is set by prompt_repo_selection
+    if ! resolve_selection "$REPO_SEL"; then
+        error "Invalid selection"
         return 1
     fi
-    resolve_selection_to_folder "$REPO_SEL" || return 1
-    ensure_python_cmd || { error "Python not found. Activate env first."; return 1; }
     
-    # numeric index maps to folder
-    if [[ "$REPO_SEL" =~ ^[0-9]+$ ]]; then
-        CURRENT_REPO_PATH="$(repo_folder_from_url "${poke_repos_mainline[$REPO_SEL]}")"
-    fi
-    if [ -z "${CURRENT_REPO_PATH:-}" ]; then
-        CURRENT_REPO_PATH="$REPO_SEL"
+    # resolve_selection sets:
+    #   REPO_SEL_URL, REPO_SEL_FOLDER, REPO_LOCAL_PATH
+    # Use the helper's local path (REPO_LOCAL_PATH is REPO_BASE_DIR/<folder>)
+    CURRENT_REPO_PATH="$REPO_LOCAL_PATH"
+    
+    # ensure the local path exists
+    if [ ! -d "$CURRENT_REPO_PATH" ]; then
+        error "Repo folder $CURRENT_REPO_PATH does not exist locally. Clone it first."
+        return 1
     fi
     
     info "Selected project: $CURRENT_REPO_PATH"
 }
 
-# Prompt project selection at script start
+
+# Prompt selection at script start
 select_project || exit 1
 
 # -------------------------
@@ -155,14 +168,13 @@ while true; do
         5) run_script qwen/04_link_headers.py "enriched_functions.jsonl" ;;
         6) run_script qwen/05_generate_qna.py "enriched_functions.jsonl" ;;
         7) run_script qwen/06_train_lora.py "qna_train.jsonl" ;;
-        
         8) run_script qwen/07_embed_code.py "lora_adapter.jsonl" ;;
         9) run_script qwen/08_query_system.py "embeddings.jsonl" ;;
         10) run_script qwen/09_evaluate.py "qna_dataset.jsonl" ;;
         21) install_dependencies ;;
         99) cleanup_jsonl ;;
         0) break ;;
-        *) echo "Invalid choice. Please try again." ;;
+        *) error "Invalid choice. Please try again." ;;
     esac
     
     read -p "Press Enter to continue..."
