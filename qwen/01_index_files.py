@@ -3,7 +3,7 @@
 01_index_files.py — discover files (by extension), collect metadata → JSONL
 
 Behavior changes per request:
-- Only CLI option: --extensions (defaults to .c .h)
+- Only CLI option: --extensions (defaults to .c .h .asm)
 - Always computes SHA256 for every file
 - Uses only Python standard library
 - Dynamically determines worker count
@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Iterable, List, Optional
 
 # ---------- Configuration / sensible defaults ----------
-DEFAULT_EXTENSIONS = [".c", ".h"]
+DEFAULT_EXTENSIONS = [".c", ".h", ".asm"]
 OUTPUT_PATH = Path("data/file_index.jsonl")
 _TEMP_SUFFIX = ".tmp"
 # Determine workers dynamically for IO-bound tasks (conservative cap)
@@ -59,7 +59,7 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         "--extensions",
         nargs="+",
         default=DEFAULT_EXTENSIONS,
-        help="File extensions to include (e.g. .c .h). Default: .c .h",
+        help="File extensions to include (e.g. .c .h .asm). Default: .c .h .asm",
     )
     p.add_argument(
         "--output",
