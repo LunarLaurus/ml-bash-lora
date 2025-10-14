@@ -146,20 +146,67 @@ def model_prompt_file(file_path: str, fn_entries: list) -> str:
 def run_model(pipe, prompt: str) -> dict:
     """
     Run the model on a single prompt sequentially.
-    Truncation ensures we never exceed model limits.
-    Returns a dict with expected keys.
+    Always returns a dict with keys:
+      - summary (str)
+      - intent_tags (list)
+      - risk_notes (str)
+      - change_recipe (str)
+      - confidence (float)
+    This function is defensive against different pipeline return types
+    and against non-JSON model outputs.
     """
     try:
-        # Wrap in a list for pipeline, truncate internally too
-        output = pipe([prompt], truncation=True)[0]["generated_text"]
-        return json.loads(output)
-    except Exception:
+        # ensure we call pipeline with a list so it behaves consistently
+        with torch.no_grad():
+            outputs = pipe([prompt], truncation=True, max_length=MAX_TOKENS)
+
+        # normalize to text
+        text = ""
+        if isinstance(outputs, list) and outputs:
+            first = outputs[0]
+            if isinstance(first, dict):
+                # standard output shape
+                text = first.get("generated_text") or first.get("text") or ""
+            else:
+                # sometimes pipeline returns a list of strings
+                text = str(first)
+        else:
+            # pipeline returned something unexpected
+            text = str(outputs)
+
+        # try parsing JSON (model expected to return a JSON string)
+        try:
+            parsed = json.loads(text)
+            if isinstance(parsed, dict):
+                # make sure minimal fields exist
+                parsed.setdefault("summary", "")
+                parsed.setdefault("intent_tags", [])
+                parsed.setdefault("risk_notes", "")
+                parsed.setdefault("change_recipe", "")
+                parsed.setdefault("confidence", 0.6)
+                return parsed
+            # if parsed is not a dict, fall through to fallback
+        except json.JSONDecodeError:
+            # not JSON — fall back to wrapping the raw text
+            pass
+
+        # fallback: return the whole text as the summary
         return {
-            "summary": output if "output" in locals() else "",
+            "summary": text,
             "intent_tags": [],
             "risk_notes": "",
             "change_recipe": "",
             "confidence": 0.6,
+        }
+
+    except Exception as e:
+        logging.exception("run_model failed: %s", e)
+        return {
+            "summary": "",
+            "intent_tags": [],
+            "risk_notes": "",
+            "change_recipe": "",
+            "confidence": 0.0,
         }
 
 
@@ -198,10 +245,19 @@ def enrich_functions(parsed_path: Path, output_path: Path, dep_graph: dict, pipe
 
         prompt = model_prompt_function(entry, pipe.tokenizer)
         res = run_model(pipe, prompt)
+        if not isinstance(res, dict):
+            res = {
+                "summary": str(res),
+                "intent_tags": [],
+                "risk_notes": "",
+                "change_recipe": "",
+                "confidence": 0.6,
+            }
+
         entry["summary"] = res.get("summary", "")
         entry["change_recipe"] = res.get("change_recipe", "")
         entry["confidence_score"] = float(res.get("confidence", 0.6))
-        entry["generated_at"] = datetime.utcnow().isoformat() + "Z"
+        entry["generated_at"] = datetime.timetz.utcnow().isoformat() + "Z"
 
         enriched_entries.append(entry)
 
