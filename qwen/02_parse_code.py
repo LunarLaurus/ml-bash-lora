@@ -478,6 +478,7 @@ def main(argv: Optional[List[str]] = None):
         format="%(asctime)s %(levelname)s: %(message)s",
         stream=sys.stderr,
     )
+    global _temp_output_path
 
     repo_dir: Path = args.repo_directory
     if not repo_dir.exists() or not repo_dir.is_dir():
@@ -542,7 +543,6 @@ def main(argv: Optional[List[str]] = None):
         logging.error("Interrupted. Partial output (if any) at %s", _temp_output_path)
         raise SystemExit(1)
 
-    global _temp_output_path
     if _temp_output_path and Path(_temp_output_path).exists():
         args.output.parent.mkdir(parents=True, exist_ok=True)
         os.replace(str(_temp_output_path), str(args.output))
