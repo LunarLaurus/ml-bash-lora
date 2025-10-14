@@ -46,14 +46,14 @@ select_project(){
         info "Cancelled"
         return 0
     fi
-    resolve_selection_to_folder "$REPO_CHOICE" || return 1
+    resolve_selection_to_folder "$REPO_SEL" || return 1
     ensure_python_cmd || { error "Python not found. Activate env first."; return 1; }
     # compute FOLDER_PATH if index selected
-    if [[ "$REPO_CHOICE" =~ ^[0-9]+$ ]]; then
-        CURRENT_REPO_PATH="$(repo_folder_from_url "${poke_repos_mainline[$REPO_CHOICE]}")"
+    if [[ "$REPO_SEL" =~ ^[0-9]+$ ]]; then
+        CURRENT_REPO_PATH="$(repo_folder_from_url "${poke_repos_mainline[$REPO_SEL]}")"
     fi
     if [ -z "${CURRENT_REPO_PATH:-}" ]; then
-        CURRENT_REPO_PATH="$REPO_CHOICE"
+        CURRENT_REPO_PATH="$REPO_SEL"
     fi
 }
 
