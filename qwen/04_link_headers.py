@@ -16,13 +16,14 @@ Outputs:
 
 import json
 import os
+import logging
 from pathlib import Path
 import sys
 from typing import List, Dict
 
-GRAPH_FUNCTIONS = Path("data/dep_graph_functions.jsonl")
-ENRICHED_FUNCTIONS = Path("data/enriched_functions.jsonl")
-LINKED_OUTPUT = Path("data/linked_functions.jsonl")
+INPUT_GRAPH_FUNCTIONS_PATH = Path("data/dep_graph_functions.jsonl")
+INPUT_FUNCTIONS_PATH = Path("data/enriched_functions.jsonl")
+OUTPUT_PATH = Path("data/linked_functions.jsonl")
 
 
 # ------------------ helper ------------------
@@ -123,6 +124,15 @@ if __name__ == "__main__":
         print("Repo dir not found: " + repo_dir)
         sys.exit(1)
 
-    rel_output_path = repo_dir / LINKED_OUTPUT
+    rel_output_path = repo_dir / OUTPUT_PATH
+    rel_input_func_path = repo_dir / INPUT_FUNCTIONS_PATH
+    rel_input_graph_path = repo_dir / INPUT_GRAPH_FUNCTIONS_PATH
 
-    link_headers(repo_dir, ENRICHED_FUNCTIONS, GRAPH_FUNCTIONS, rel_output_path)
+    if not rel_input_func_path.exists():
+        logging.error("Parsed functions file not found: %s", rel_input_func_path)
+        sys.exit(1)
+    if not rel_input_graph_path.exists():
+        logging.error("Dependency graph file not found: %s", rel_input_graph_path)
+        sys.exit(1)
+
+    link_headers(repo_dir, rel_input_func_path, rel_input_graph_path, rel_output_path)

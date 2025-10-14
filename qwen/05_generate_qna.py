@@ -16,9 +16,9 @@ import json
 from pathlib import Path
 import sys
 
-ENRICHED_FUNCTIONS = Path("data/enriched_functions.jsonl")
-LINKED_FUNCTIONS = Path("data/linked_functions.jsonl")
-QNA_OUTPUT = Path("data/qna_train.jsonl")
+INPUT_FUNCTIONS_PATH = Path("data/enriched_functions.jsonl")
+INPUT_LINKS_PATH = Path("data/linked_functions.jsonl")
+OUTPUT_PATH = Path("data/qna_train.jsonl")
 
 
 def load_jsonl(path: Path):
@@ -148,20 +148,23 @@ if __name__ == "__main__":
         sys.exit(1)
 
     repo_dir = Path(sys.argv[1])
-    enriched_entries = load_jsonl(ENRICHED_FUNCTIONS)
-    linked_entries = load_jsonl(LINKED_FUNCTIONS)
-    qnas = generate_qna(enriched_entries, linked_entries)
+
+    rel_input_funcs_path = repo_dir / INPUT_FUNCTIONS_PATH
+    rel_input_links_path = repo_dir / INPUT_LINKS_PATH
+    rel_output_path = repo_dir / OUTPUT_PATH
 
     if not repo_dir.exists():
         print("Repo dir not found: " + repo_dir)
         sys.exit(1)
-    if not ENRICHED_FUNCTIONS.exists():
-        print("Enriched functions file not found: " + ENRICHED_FUNCTIONS)
+    if not rel_input_funcs_path.exists():
+        print("Enriched functions file not found: " + rel_input_funcs_path)
         sys.exit(1)
-    if not LINKED_FUNCTIONS.exists():
-        print("Linked functions file not found: " + LINKED_FUNCTIONS)
+    if not rel_input_links_path.exists():
+        print("Linked functions file not found: " + rel_input_links_path)
         sys.exit(1)
 
-    rel_output_path = repo_dir / QNA_OUTPUT
+    enriched_entries = load_jsonl(rel_input_funcs_path)
+    linked_entries = load_jsonl(rel_input_links_path)
+    qnas = generate_qna(enriched_entries, linked_entries)
 
     write_qna(qnas, rel_output_path)

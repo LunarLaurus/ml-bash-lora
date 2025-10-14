@@ -26,9 +26,9 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 # Defaults
-DEFAULT_PARSED = Path("data/parsed_functions.jsonl")
-OUT_FUNCS = Path("data/dep_graph_functions.jsonl")
-OUT_FILES = Path("data/dep_graph_files.jsonl")
+INPUT_PATH = Path("data/parsed_functions.jsonl")
+OUTPUT_PATH_FUNCS = Path("data/dep_graph_functions.jsonl")
+OUTPUT_PATH_FILES = Path("data/dep_graph_files.jsonl")
 _TEMP_SUFFIX = ".tmp"
 
 # graceful shutdown
@@ -457,12 +457,13 @@ def main(argv: Optional[List[str]] = None):
             "repo_directory %s is not a directory or does not exist", repo_dir
         )
         sys.exit(1)
-    rel_output_path_funcs = repo_dir / OUT_FUNCS
-    rel_output_path_files = repo_dir / OUT_FILES
+    rel_output_path_funcs = repo_dir / OUTPUT_PATH_FUNCS
+    rel_output_path_files = repo_dir / OUTPUT_PATH_FILES
+    rel_input_path = repo_dir / INPUT_PATH
 
     try:
         build_and_write_graphs(
-            repo_dir, DEFAULT_PARSED, rel_output_path_funcs, rel_output_path_files
+            repo_dir, rel_input_path, rel_output_path_funcs, rel_output_path_files
         )
     except KeyboardInterrupt:
         logging.error("Interrupted.")

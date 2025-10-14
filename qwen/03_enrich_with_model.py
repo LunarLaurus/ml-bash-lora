@@ -27,9 +27,9 @@ from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
 import textwrap
 
 # ------------------------- config -------------------------
-FUNCTIONS_PARSED = Path("data/parsed_functions.jsonl")
-GRAPH_FUNCTIONS = Path("data/dep_graph_functions.jsonl")
-ENRICHED_OUTPUT = Path("data/enriched_functions.jsonl")
+INPUT_FUNCTIONS_PATH = Path("data/parsed_functions.jsonl")
+INPUT_GRAPH_FUNCTIONS_PATH = Path("data/dep_graph_functions.jsonl")
+OUTPUT_PATH = Path("data/enriched_functions.jsonl")
 MAX_TOKENS = 512
 BATCH_SIZE = 32
 
@@ -344,16 +344,20 @@ def main():
     if not repo_dir.exists():
         logging.error("Repo dir not found: %s", repo_dir)
         sys.exit(1)
-    if not FUNCTIONS_PARSED.exists():
-        logging.error("Parsed functions file not found: %s", FUNCTIONS_PARSED)
+
+    rel_input_func_path = repo_dir / INPUT_FUNCTIONS_PATH
+    rel_input_graph_path = repo_dir / INPUT_GRAPH_FUNCTIONS_PATH
+
+    if not rel_input_func_path.exists():
+        logging.error("Parsed functions file not found: %s", rel_input_func_path)
         sys.exit(1)
-    if not GRAPH_FUNCTIONS.exists():
-        logging.error("Dependency graph file not found: %s", GRAPH_FUNCTIONS)
+    if not rel_input_graph_path.exists():
+        logging.error("Dependency graph file not found: %s", rel_input_graph_path)
         sys.exit(1)
 
-    rel_output_path = repo_dir / ENRICHED_OUTPUT
+    rel_output_path = repo_dir / OUTPUT_PATH
     dep_graph = {}
-    with GRAPH_FUNCTIONS.open("r", encoding="utf-8") as f:
+    with rel_input_graph_path.open("r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line:
@@ -367,7 +371,9 @@ def main():
 
     try:
         load_model()
-        enrich_functions_async(FUNCTIONS_PARSED, rel_output_path, dep_graph, PIPELINE)
+        enrich_functions_async(
+            rel_input_func_path, rel_output_path, dep_graph, PIPELINE
+        )
     except KeyboardInterrupt:
         logging.warning("KeyboardInterrupt received! Shutting down...")
         _shutdown.set()

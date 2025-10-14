@@ -30,7 +30,7 @@ from typing import Dict, Iterable, List, Optional
 
 # Defaults
 DEFAULT_EXTENSIONS = [".c", ".h", ".asm"]
-INDEX_PATH = Path("data/file_index.jsonl")
+INPUT_PATH = Path("data/file_index.jsonl")
 OUTPUT_PATH = Path("data/parsed_functions.jsonl")
 _TEMP_SUFFIX = ".tmp"
 
@@ -475,7 +475,14 @@ def main(argv: Optional[List[str]] = None):
         )
         sys.exit(1)
 
-    hash_map = load_index_hashes(INDEX_PATH) if INDEX_PATH else {}
+    rel_output_path = repo_dir / OUTPUT_PATH
+    rel_input_path = repo_dir / INPUT_PATH
+
+    if not rel_input_path.exists() or rel_input_path.is_dir():
+        logging.warning(
+            "INDEX_PATH %s is a directory or file does not exist", rel_input_path
+        )
+    hash_map = load_index_hashes(rel_input_path) if rel_input_path else {}
 
     logging.info("Discovering files under %s ...", repo_dir)
     candidates = discover_files(repo_dir, args.extensions)
@@ -485,8 +492,6 @@ def main(argv: Optional[List[str]] = None):
     if total_files == 0:
         logging.info("No files found; exiting.")
         return
-
-    rel_output_path = repo_dir / OUTPUT_PATH
 
     q: "queue.Queue[Optional[dict]]" = queue.Queue(maxsize=args.workers * 4)
     writer = threading.Thread(
