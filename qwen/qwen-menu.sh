@@ -37,6 +37,7 @@ run_script() {
     select_project
     shift
     if current_repo_path_check; then
+        info "Running Script: $SCRIPT_PATH for $CURRENT_REPO_PATH"
         "$PYTHON_CMD" "$SCRIPT_PATH" "$CURRENT_REPO_PATH" "$@"
     fi
 }
