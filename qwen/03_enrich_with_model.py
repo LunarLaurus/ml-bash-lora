@@ -444,6 +444,7 @@ def enrich_functions(
 
 # ------------------------- main -------------------------
 def main():
+    global MAX_TOKENS
     parser = argparse.ArgumentParser(
         description="Enrich parsed functions into JSONL with model summaries."
     )
@@ -500,7 +501,6 @@ def main():
 
     try:
         # load model with user-specified max tokens
-        global MAX_TOKENS
         MAX_TOKENS = args.max_tokens
         pipe = load_model(max_tokens=MAX_TOKENS)
         enrich_functions(
