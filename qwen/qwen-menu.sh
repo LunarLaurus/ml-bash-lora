@@ -90,7 +90,7 @@ while true; do
         9) run_script qwen/08_query_system.py ;;
         10) run_script qwen/09_evaluate.py ;;
         21) install_dependencies ;;
-        0) exit 0 ;;
+        0) break ;;
         *) echo "Invalid choice. Please try again." ;;
     esac
     
