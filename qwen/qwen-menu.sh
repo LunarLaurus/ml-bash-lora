@@ -44,9 +44,9 @@ file_exists() {
 file_status_label() {
     local file="$1"
     if file_exists "$file"; then
-        printf "%sok%s" "$BGREEN" "$NC"
+        echo -e "${BGREEN}ok${NC}"
     else
-        printf "%smissing%s" "$BRED" "$NC"
+        echo -e "${BRED}missing${NC}"
     fi
 }
 
@@ -195,7 +195,7 @@ while true; do
     echo "-------------------------"
     
     menu_entry 1  "Index Project Files"
-    menu_entry 2  "Parse Indexed Code"                "qwen/02_parse_code.py"               "parsed_files.jsonl"
+    menu_entry 2  "Parse Indexed Code"                "qwen/02_parse_code.py"               "file_index.jsonl"
     menu_entry 3  "Build Dependency Graph"            "qwen/02b_build_dependency_graphs.py" "dep_graph_functions.jsonl"
     menu_entry 4  "Enrich"                            "qwen/03_enrich_with_model.py"        "parsed_functions.jsonl"
     menu_entry 5  "Link Headers"                      "qwen/04_link_headers.py"             "enriched_functions.jsonl"
@@ -213,9 +213,9 @@ while true; do
     
     case $choice in
         1) run_script qwen/01_index_files.py ;;
-        2) run_script qwen/02_parse_code.py "parsed_files.jsonl" ;;
-        3) run_script qwen/02b_build_dependency_graphs.py "dep_graph_functions.jsonl" ;;
-        4) run_script qwen/03_enrich_with_model.py "parsed_functions.jsonl" ;;
+        2) run_script qwen/02_parse_code.py "file_index.jsonl" ;;
+        3) run_script qwen/02b_build_dependency_graphs.py "parsed_functions.jsonl" ;;
+        4) run_script qwen/03_enrich_with_model.py "dep_graph_functions.jsonl" ;;
         5) run_script qwen/04_link_headers.py "enriched_functions.jsonl" ;;
         6) run_script qwen/05_generate_qna.py "enriched_functions.jsonl" ;;
         7) run_script qwen/06_train_lora.py "qna_train.jsonl" ;;
