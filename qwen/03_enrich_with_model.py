@@ -16,12 +16,12 @@ import json
 import sys
 import threading
 import queue
+import logging
 from pathlib import Path
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from hashlib import sha256
 import re
-
+from tqdm import tqdm
 from transformers import pipeline
 
 FUNCTIONS_PARSED = Path("data/parsed_functions.jsonl")
@@ -36,9 +36,7 @@ CONTROL_KEYWORDS = re.compile(
 
 
 def naive_cyclomatic(body: str) -> int:
-    if not body:
-        return 1
-    return 1 + len(CONTROL_KEYWORDS.findall(body))
+    return 1 + len(CONTROL_KEYWORDS.findall(body)) if body else 1
 
 
 def count_loc(body: str) -> int:
@@ -86,7 +84,10 @@ def naive_risk_notes(body: str, suffix: str) -> str:
 
 # ------------------------- model -------------------------
 def load_model():
-    return pipeline("text2text-generation", model="Salesforce/codet5-small", device=-1)
+    logging.info("Loading model Salesforce/codet5-small...")
+    pipe = pipeline("text2text-generation", model="Salesforce/codet5-small", device=-1)
+    logging.info("Model loaded successfully.")
+    return pipe
 
 
 def model_prompt_function(fn_entry: dict) -> str:
@@ -154,22 +155,23 @@ def writer_thread(output_path: Path, q: "queue.Queue[dict]"):
             f.write(json.dumps(item, ensure_ascii=False) + "\n")
             written += 1
             q.task_done()
-    # atomic rename
     tmp_path.replace(output_path)
-    print(f"[INFO] Wrote {written} entries to {output_path}")
+    logging.info("Wrote %d entries to %s", written, output_path)
 
 
 # ------------------------- enrichment -------------------------
 def enrich_functions(parsed_path: Path, output_path: Path, dep_graph: dict):
+    logging.info("Starting function enrichment...")
     pipe = load_model()
+
     entries: list[dict] = []
     with parsed_path.open("r", encoding="utf-8") as f:
         for ln in f:
             ln = ln.strip()
             if ln:
                 entries.append(json.loads(ln))
+    logging.info("Loaded %d parsed functions.", len(entries))
 
-    # group functions by file
     files_map = {}
     for entry in entries:
         file_path = entry["file_path"]
@@ -179,26 +181,28 @@ def enrich_functions(parsed_path: Path, output_path: Path, dep_graph: dict):
     writer = threading.Thread(target=writer_thread, args=(output_path, q), daemon=True)
     writer.start()
 
+    logging.info("Processing functions with ThreadPoolExecutor...")
     with ThreadPoolExecutor() as exc:
-        futures = []
-        for entry in entries:
-            futures.append(
-                exc.submit(process_function_entry, entry, pipe, dep_graph, q)
-            )
-        for fut in as_completed(futures):
+        futures = {
+            exc.submit(process_function_entry, entry, pipe, dep_graph, q): entry
+            for entry in entries
+        }
+        for fut in tqdm(as_completed(futures), total=len(futures), desc="Functions"):
             try:
                 fut.result()
             except Exception:
-                continue
+                logging.exception("Error processing function %s", futures[fut])
 
-    # File-level overviews
-    for file_path, fn_entries in files_map.items():
+    logging.info("Processing file-level summaries...")
+    for file_path, fn_entries in tqdm(
+        files_map.items(), total=len(files_map), desc="Files"
+    ):
         file_entry = process_file_entry(file_path, fn_entries, pipe)
         q.put(file_entry)
 
-    # finish writing
     q.put(None)
     writer.join()
+    logging.info("Enrichment completed successfully.")
 
 
 def process_function_entry(entry: dict, pipe, dep_graph: dict, q: "queue.Queue[dict]"):
@@ -206,14 +210,12 @@ def process_function_entry(entry: dict, pipe, dep_graph: dict, q: "queue.Queue[d
     body = fn.get("body") or ""
     suffix = Path(entry.get("file_path", "")).suffix.lower()
 
-    # Heuristics
     entry["loc"] = count_loc(body)
     entry["cyclomatic"] = naive_cyclomatic(body)
     entry["calls"] = CALL_SITE_REGEX.findall(body)
     entry["intent_tags"] = detect_intent_tags(body, suffix)
     entry["risk_notes"] = naive_risk_notes(body, suffix)
 
-    # Graph info
     key = entry.get("id")
     graph_info = dep_graph.get(key, {})
     entry["callers"] = graph_info.get("callers", [])
@@ -222,7 +224,6 @@ def process_function_entry(entry: dict, pipe, dep_graph: dict, q: "queue.Queue[d
         "graph_distance", {"to_entry_points": None}
     )
 
-    # Model enrichment
     prompt = model_prompt_function(entry)
     model_result = run_model(pipe, [prompt])[0]
     entry["summary"] = model_result.get("summary", "")
@@ -234,7 +235,6 @@ def process_function_entry(entry: dict, pipe, dep_graph: dict, q: "queue.Queue[d
 
 
 def process_file_entry(file_path: str, fn_entries: list, pipe) -> dict:
-    # Aggregate heuristics
     file_loc = sum(fn.get("loc", 0) for fn in fn_entries)
     file_cyclo = sum(fn.get("cyclomatic", 0) for fn in fn_entries)
     file_tags = sorted({tag for fn in fn_entries for tag in fn.get("intent_tags", [])})
@@ -242,7 +242,6 @@ def process_file_entry(file_path: str, fn_entries: list, pipe) -> dict:
         fn.get("risk_notes", "") for fn in fn_entries if fn.get("risk_notes")
     )
 
-    # Model prompt
     prompt = model_prompt_file(file_path, fn_entries)
     model_result = run_model(pipe, [prompt])[0]
 
@@ -264,23 +263,34 @@ def process_file_entry(file_path: str, fn_entries: list, pipe) -> dict:
 
 # ------------------------- main -------------------------
 def main():
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+    )
+
     if len(sys.argv) != 2:
-        print("Usage: python3 scripts/04_enrich_functions.py <repo_directory>")
+        logging.error("Usage: python3 scripts/04_enrich_functions.py <repo_directory>")
         sys.exit(1)
     repo_dir = Path(sys.argv[1])
 
     if not FUNCTIONS_PARSED.exists():
-        print(f"[ERROR] Parsed file not found: {FUNCTIONS_PARSED}")
+        logging.error("Parsed functions file not found: %s", FUNCTIONS_PARSED)
         sys.exit(1)
     if not GRAPH_FUNCTIONS.exists():
-        print(f"[ERROR] Dependency graph not found: {GRAPH_FUNCTIONS}")
+        logging.error("Dependency graph file not found: %s", GRAPH_FUNCTIONS)
         sys.exit(1)
 
+    dep_graph = {}
     with GRAPH_FUNCTIONS.open("r", encoding="utf-8") as f:
-        dep_graph = json.load(f)
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            obj = json.loads(line)
+            key = obj.get("id")
+            if key:
+                dep_graph[key] = obj
 
     enrich_functions(FUNCTIONS_PARSED, ENRICHED_OUTPUT, dep_graph)
-    print("[INFO] Enrichment finished successfully.")
 
 
 if __name__ == "__main__":
