@@ -77,9 +77,14 @@ install_dependencies() {
 run_script() {
     local script_path="$1"
     local expected_input="$2"
-    shift 2 || true
+    shift
+    if [ -n "$expected_input" ]; then
+        shift  # only shift $2 if it exists
+    fi
     
-    if ! current_repo_path_check; then return 1; fi
+    if ! current_repo_path_check; then
+        return 1
+    fi
     
     if [ -n "$expected_input" ]; then
         if ! check_file "$expected_input"; then
@@ -91,6 +96,7 @@ run_script() {
     info "Running Script: $script_path for $CURRENT_REPO_PATH"
     "$PYTHON_CMD" "$script_path" "$CURRENT_REPO_PATH" "$@"
 }
+
 
 # -------------------------
 # Project selection
