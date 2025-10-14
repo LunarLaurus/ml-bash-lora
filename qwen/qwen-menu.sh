@@ -31,6 +31,7 @@ install_dependencies() {
 # Function to run a script with the current repo context
 run_script() {
     SCRIPT_PATH="$1"
+    select_project
     shift
     if current_repo_path_check; then
         "$PYTHON_CMD" "$SCRIPT_PATH" "$CURRENT_REPO_PATH" "$@"
@@ -54,7 +55,6 @@ select_project(){
 }
 
 ensure_python_cmd || { info -e "${RED}Python not found for active environment. Activate/Create an Env. first.${NC}"; }
-select_project
 # Main menu loop
 while true; do
     clear
