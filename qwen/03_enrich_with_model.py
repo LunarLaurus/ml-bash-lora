@@ -38,6 +38,7 @@ BATCH_SIZE = 32
 _input_queue = queue.Queue(maxsize=BATCH_SIZE * 2)
 _output_queue = queue.Queue(maxsize=BATCH_SIZE * 2)
 _shutdown = threading.Event()
+PIPELINE_LOCK = threading.Lock()
 
 # ------------------------- module-level vars -------------------------
 TOKENIZER = None
@@ -178,7 +179,8 @@ def batch_run_model(pipe, prompts: list) -> list:
         batch = prompts[i : i + BATCH_SIZE]
         logging.info("Sending batch of %d prompts to GPU.", len(batch))
         try:
-            outputs = pipe(batch)
+            with PIPELINE_LOCK:
+                outputs = pipe(batch)
         except Exception as e:
             logging.error("Pipeline batch failed: %s", e)
             outputs = [{"generated_text": ""}] * len(batch)
