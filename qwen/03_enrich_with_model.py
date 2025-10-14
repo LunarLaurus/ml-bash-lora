@@ -23,7 +23,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import re
 from tqdm import tqdm
 import torch
-from transformers import pipeline
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
 
 FUNCTIONS_PARSED = Path("data/parsed_functions.jsonl")
 GRAPH_FUNCTIONS = Path("data/dep_graph_functions.jsonl")
@@ -92,11 +92,28 @@ def get_device():
 
 def load_model():
     device = get_device()
-    logging.info("Loading model Salesforce/codet5-small on device %s...", device)
-    pipe = pipeline(
-        "text2text-generation", model="Salesforce/codet5-small", device=device
+    logging.info("Initializing model load on device %s...", device)
+
+    logging.info("Loading tokenizer for Salesforce/codet5-small...")
+    tokenizer = AutoTokenizer.from_pretrained("Salesforce/codet5-small")
+    logging.info("Tokenizer loaded successfully.")
+
+    logging.info(
+        "Loading model weights for Salesforce/codet5-small on device %s...", device
     )
-    logging.info("Model loaded successfully.")
+    model = AutoModelForSeq2SeqLM.from_pretrained("Salesforce/codet5-small").to(device)
+    logging.info("Model weights loaded successfully.")
+
+    logging.info("Creating pipeline...")
+    pipe = pipeline(
+        "text2text-generation",
+        model=model,
+        tokenizer=tokenizer,
+        device=device,
+        truncation=True,
+        max_new_tokens=MAX_TOKENS,
+    )
+    logging.info("Pipeline created. Model ready for inference.")
     return pipe
 
 
