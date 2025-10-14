@@ -300,7 +300,14 @@ def main():
             if key:
                 dep_graph[key] = obj
 
-    enrich_functions(FUNCTIONS_PARSED, ENRICHED_OUTPUT, dep_graph)
+    try:
+        enrich_functions(FUNCTIONS_PARSED, ENRICHED_OUTPUT, dep_graph)
+    except KeyboardInterrupt:
+        logging.warning("KeyboardInterrupt received! Shutting down...")
+        _shutdown.set()
+        # Give writer a chance to exit
+        queue_obj = queue.Queue()
+        queue_obj.put(None)
 
 
 if __name__ == "__main__":
