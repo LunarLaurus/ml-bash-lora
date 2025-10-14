@@ -1,9 +1,9 @@
 #!/bin/bash
 source "$PROJECT_ROOT/helpers.sh"
 source "$PROJECT_ROOT/conda/env_manager.sh"
-source "$PROJECT_ROOT/conda/git_data.sh"
-source "$PROJECT_ROOT/conda/git_utils.sh"
-source "$PROJECT_ROOT/conda/python_utils.sh"
+source "$PROJECT_ROOT/git/git_data.sh"
+source "$PROJECT_ROOT/git/git_utils.sh"
+source "$PROJECT_ROOT/git/python_utils.sh"
 
 CURRENT_REPO_PATH=""
 
