@@ -195,16 +195,25 @@ def generate_batch(
     Deterministic batched generation using model.generate.
     Returns list of parsed dicts (or fallback dicts).
     """
-    # tokenise as batch
-    inputs = tokenizer(prompts, return_tensors="pt", padding=True, truncation=True).to(
-        device
+    # ensure encoder inputs won't exceed model_max_length
+    max_enc_len = getattr(tokenizer, "model_max_length", max_new_tokens)
+    # tokenise as batch (explicit max_length + truncation)
+    inputs = tokenizer(
+        prompts,
+        return_tensors="pt",
+        padding=True,
+        truncation=True,
+        max_length=max_enc_len,
     )
+    # move tensors to device explicitly (safer cross-versions)
+    inputs = {k: v.to(device) for k, v in inputs.items()}
+
     for attempt in range(retries + 1):
         try:
             with torch.no_grad():
                 outputs = model.generate(
                     **inputs,
-                    max_new_tokens=max_new_tokens,
+                    max_new_tokens=max_enc_len,
                     num_beams=num_beams,
                     do_sample=do_sample,
                     early_stopping=True,
@@ -319,14 +328,11 @@ def enrich_functions(
         except RuntimeError as e:
             if "out of memory" in str(e).lower() and current_batch_size_local > 1:
                 logging.warning("OOM during generate. Will retry with smaller batches.")
-                # re-chunk and retry with half batch size
                 half = max(1, current_batch_size_local // 2)
-                # process in smaller chunks
                 i = 0
                 while i < len(func_prompts):
                     chunk_prompts = func_prompts[i : i + half]
                     chunk_entries = func_prompt_entries[i : i + half]
-                    # recursive-ish call: attempt to flush smaller chunk
                     try:
                         small_results = generate_batch(
                             model,
@@ -338,15 +344,23 @@ def enrich_functions(
                             do_sample=False,
                         )
                         batch_latency = time.time() - trackerTimeStart
+                        # tokens used should be calculated for the chunk, not the entire func_prompts
                         tokens_used = sum(
-                            len(tokenizer.encode(p)) for p in func_prompts
+                            len(
+                                tokenizer.encode(
+                                    p,
+                                    truncation=True,
+                                    max_length=getattr(
+                                        tokenizer, "model_max_length", 512
+                                    ),
+                                )
+                            )
+                            for p in chunk_prompts
                         )
-                        tracker.update(len(func_prompts), tokens_used, batch_latency)
+                        tracker.update(len(chunk_prompts), tokens_used, batch_latency)
                     except RuntimeError:
-                        # if still OOM on batch size 1, re-raise
                         if half == 1:
                             raise
-                        # try even smaller in next loop
                         half = max(1, half // 2)
                         continue
                     # write small results
@@ -363,7 +377,6 @@ def enrich_functions(
                         entry["change_recipe"] = res.get("change_recipe", "")
                         entry["confidence_score"] = float(res.get("confidence", 0.6))
                         entry["generated_at"] = datetime.now(timezone.utc).isoformat()
-                        # stream to disk if not processed
                         if entry.get("id") not in processed:
                             with output_path.open("a", encoding="utf-8") as outf:
                                 outf.write(json.dumps(entry, ensure_ascii=False) + "\n")
@@ -522,8 +535,17 @@ def enrich_functions(
                 do_sample=False,
             )
             batch_latency = time.time() - trackerTimeStart
-            tokens_used = sum(len(tokenizer.encode(p)) for p in func_prompts)
-            tracker.update(len(func_prompts), tokens_used, batch_latency)
+            tokens_used = sum(
+                len(
+                    tokenizer.encode(
+                        p,
+                        truncation=True,
+                        max_length=getattr(tokenizer, "model_max_length", 512),
+                    )
+                )
+                for p in file_prompts
+            )
+            tracker.update(len(file_prompts), tokens_used, batch_latency)
             for (file_path_i, fn_entries_i), file_res in zip(
                 file_prompt_items, results
             ):
@@ -567,6 +589,11 @@ def enrich_functions(
             "KeyboardInterrupt received during file processing; flushing remaining file batches..."
         )
         raise
+
+        # --- fix file-level final flush tokens_used bug (use file_prompts, not func_prompts) ---
+    # where you do the final file-level generate_batch flush:
+
+    ...
 
     logging.info("Enrichment completed. Output appended to %s", output_path)
 
