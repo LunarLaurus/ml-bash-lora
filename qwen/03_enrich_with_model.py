@@ -20,7 +20,7 @@ import textwrap
 import time
 from typing import List, Tuple
 from tqdm import tqdm
-from qwen import ProgressTracker
+from ProgressTracker import ProgressTracker
 import torch
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
