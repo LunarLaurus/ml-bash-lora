@@ -591,10 +591,6 @@ def main():
         help="max_new_tokens for generation",
     )
     args = parser.parse_args()
-    global tracker
-    tracker = ProgressTracker(repo_dir / "stats-enrich.json")
-    global trackerTimeStart
-    trackerTimeStart = time.time()
 
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
@@ -605,6 +601,10 @@ def main():
         logging.error("Repo dir not found: %s", repo_dir)
         sys.exit(1)
 
+    global tracker
+    tracker = ProgressTracker(repo_dir / "stats-enrich.json")
+    global trackerTimeStart
+    trackerTimeStart = time.time()
     rel_input_func_path = repo_dir / INPUT_FUNCTIONS_PATH
     rel_input_graph_path = repo_dir / INPUT_GRAPH_FUNCTIONS_PATH
     rel_output_path = repo_dir / OUTPUT_PATH
