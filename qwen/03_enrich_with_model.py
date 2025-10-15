@@ -253,6 +253,7 @@ def generate_batch(
 
 # ------------------------- main enrichment -------------------------
 def load_processed_ids(path: Path) -> set:
+    path.parent.mkdir(parents=True, exist_ok=True)
     if not path.exists():
         return set()
     with path.open("r", encoding="utf-8") as f:
@@ -260,6 +261,7 @@ def load_processed_ids(path: Path) -> set:
 
 
 def append_processed_id(path: Path, id_: str):
+    path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as f:
         f.write(id_ + "\n")
 
